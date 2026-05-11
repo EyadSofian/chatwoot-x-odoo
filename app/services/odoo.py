@@ -23,6 +23,21 @@ def _or_domain(clauses: list[list[Any]]) -> list[Any]:
     return ["|"] * (len(clauses) - 1) + clauses
 
 
+PARTNER_FIELDS = [
+    "id",
+    "name",
+    "email",
+    "phone",
+    "mobile",
+    "company_name",
+    "commercial_partner_id",
+    "vat",
+    "city",
+    "country_id",
+    "customer_rank",
+]
+
+
 class OdooClient:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -78,8 +93,38 @@ class OdooClient:
             kwargs["order"] = order
         return self.execute_kw(model, "search_read", [domain], kwargs)
 
-    def find_partner(self, *, email: str | None, phone: str | None) -> dict[str, Any] | None:
+    def read_records(
+        self,
+        model: str,
+        ids: list[int],
+        fields: list[str],
+    ) -> list[dict[str, Any]]:
+        if not ids:
+            return []
+        return self.execute_kw(model, "read", [ids], {"fields": fields})
+
+    def _partner_search_domain(
+        self,
+        *,
+        query: str | None = None,
+        email: str | None = None,
+        phone: str | None = None,
+    ) -> list[Any]:
         clauses: list[list[Any]] = []
+        query = (query or "").strip()
+
+        if query:
+            clauses.append(["name", "ilike", query])
+            clauses.append(["email", "ilike", query])
+            clauses.append(["phone", "ilike", query])
+            clauses.append(["mobile", "ilike", query])
+
+            query_digits = _digits(query)
+            if query_digits:
+                phone_token = query_digits[-9:] if len(query_digits) >= 9 else query_digits
+                clauses.append(["phone", "ilike", phone_token])
+                clauses.append(["mobile", "ilike", phone_token])
+
         if email:
             clauses.append(["email", "=ilike", email])
 
@@ -89,28 +134,34 @@ class OdooClient:
             clauses.append(["phone", "ilike", phone_token])
             clauses.append(["mobile", "ilike", phone_token])
 
-        if not clauses:
-            return None
+        return _or_domain(clauses)
 
-        partners = self.search_read(
+    def search_partners(
+        self,
+        *,
+        query: str | None = None,
+        email: str | None = None,
+        phone: str | None = None,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        domain = self._partner_search_domain(query=query, email=email, phone=phone)
+        if not domain:
+            return []
+
+        return self.search_read(
             "res.partner",
-            _or_domain(clauses),
-            [
-                "id",
-                "name",
-                "email",
-                "phone",
-                "mobile",
-                "company_name",
-                "commercial_partner_id",
-                "vat",
-                "city",
-                "country_id",
-                "customer_rank",
-            ],
-            limit=1,
+            domain,
+            PARTNER_FIELDS,
+            limit=limit,
             order="write_date desc",
         )
+
+    def find_partner(self, *, email: str | None, phone: str | None) -> dict[str, Any] | None:
+        partners = self.search_partners(email=email, phone=phone, limit=1)
+        return partners[0] if partners else None
+
+    def get_partner(self, partner_id: int) -> dict[str, Any] | None:
+        partners = self.read_records("res.partner", [partner_id], PARTNER_FIELDS)
         return partners[0] if partners else None
 
     def get_leads(
@@ -205,10 +256,29 @@ class OdooClient:
             order["lines"] = lines_by_order.get(int(order["id"]), [])
         return orders
 
-    def customer_snapshot(self, *, email: str | None, phone: str | None) -> dict[str, Any]:
-        partner = self.find_partner(email=email, phone=phone)
+    def customer_snapshot(
+        self,
+        *,
+        email: str | None,
+        phone: str | None,
+        query: str | None = None,
+        partner_id: int | None = None,
+    ) -> dict[str, Any]:
+        if partner_id:
+            partner = self.get_partner(partner_id)
+            matches = [partner] if partner else []
+        elif query:
+            matches = self.search_partners(query=query, email=email, phone=phone, limit=10)
+            partner = matches[0] if matches else None
+        else:
+            matches = self.search_partners(email=email, phone=phone, limit=10)
+            partner = matches[0] if matches else None
+
         partner_id = int(partner["id"]) if partner else None
-        leads = self.get_leads(partner_id=partner_id, email=email, phone=phone)
+
+        lookup_email = email or (partner or {}).get("email")
+        lookup_phone = phone or (partner or {}).get("phone") or (partner or {}).get("mobile")
+        leads = self.get_leads(partner_id=partner_id, email=lookup_email, phone=lookup_phone)
         orders = self.get_sale_orders(partner_id=partner_id)
 
         logger.info(
@@ -217,5 +287,4 @@ class OdooClient:
             len(leads),
             len(orders),
         )
-        return {"partner": partner, "leads": leads, "orders": orders}
-
+        return {"partner": partner, "matches": matches, "leads": leads, "orders": orders}

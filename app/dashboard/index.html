@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Odoo Customer Panel</title>
+    <link rel="stylesheet" href="/dashboard/assets/app.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Odoo 17</p>
+          <h1>Customer Panel</h1>
+        </div>
+        <div class="topbar-actions" aria-label="Theme">
+          <button class="theme-button is-active" type="button" data-theme-choice="auto">Auto</button>
+          <button class="theme-button" type="button" data-theme-choice="light">Light</button>
+          <button class="theme-button" type="button" data-theme-choice="dark">Dark</button>
+        </div>
+      </header>
+
+      <section class="search-panel" aria-label="Odoo search">
+        <form id="searchForm" class="search-form">
+          <label class="field">
+            <span>Search Odoo</span>
+            <input
+              id="searchInput"
+              name="q"
+              type="search"
+              placeholder="Name, email, or phone"
+              autocomplete="off"
+            />
+          </label>
+          <button class="primary-button" type="submit">Search</button>
+          <button id="refreshButton" class="secondary-button" type="button">Refresh</button>
+        </form>
+        <div id="contextLine" class="context-line">Waiting for Chatwoot context...</div>
+      </section>
+
+      <section id="statusPanel" class="status-panel is-muted">
+        <div>
+          <p class="status-label">Status</p>
+          <p id="statusText" class="status-text">Open a conversation or search manually.</p>
+        </div>
+        <button id="noteButton" class="secondary-button" type="button" disabled>Add private note</button>
+      </section>
+
+      <section class="metrics" aria-label="Customer metrics">
+        <article class="metric">
+          <span class="metric-label">Contact</span>
+          <strong id="metricContact">-</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">CRM</span>
+          <strong id="metricLeads">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">Orders</span>
+          <strong id="metricOrders">0</strong>
+        </article>
+      </section>
+
+      <section id="matchesPanel" class="section is-hidden">
+        <div class="section-header">
+          <h2>Matches</h2>
+          <span id="matchesCount" class="badge">0</span>
+        </div>
+        <div id="matchesList" class="match-list"></div>
+      </section>
+
+      <section class="tabs" aria-label="Odoo data tabs">
+        <div class="tab-list" role="tablist">
+          <button class="tab is-active" type="button" data-tab="contact">Contact</button>
+          <button class="tab" type="button" data-tab="crm">CRM</button>
+          <button class="tab" type="button" data-tab="orders">Orders</button>
+        </div>
+
+        <article id="tab-contact" class="tab-panel">
+          <dl id="contactDetails" class="details-list"></dl>
+        </article>
+
+        <article id="tab-crm" class="tab-panel is-hidden">
+          <div id="leadsList" class="record-list"></div>
+        </article>
+
+        <article id="tab-orders" class="tab-panel is-hidden">
+          <div id="ordersList" class="record-list"></div>
+        </article>
+      </section>
+    </main>
+
+    <template id="emptyTemplate">
+      <div class="empty-state">
+        <p>No data to show yet.</p>
+      </div>
+    </template>
+
+    <script src="/dashboard/assets/app.js" defer></script>
+  </body>
+</html>

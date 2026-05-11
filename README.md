@@ -3,12 +3,17 @@
 FastAPI service that receives Chatwoot webhooks, looks up the customer in Odoo 17,
 then writes an Odoo summary back to the Chatwoot conversation as a private note.
 
+It also serves a Chatwoot Dashboard App at `/dashboard`, so agents can view and
+search Odoo data inside the Chatwoot conversation screen.
+
 The first production path is read-only toward Odoo:
 
 - Find `res.partner` by email or phone.
+- Search contacts manually by name, email, or phone.
 - Show related `crm.lead` records.
 - Show recent `sale.order` records and their lines.
 - Optionally update Chatwoot conversation custom attributes for filtering.
+- Optionally add the current Odoo snapshot to the conversation as a private note.
 
 ## Architecture
 
@@ -17,6 +22,11 @@ Chatwoot webhook
     -> FastAPI bridge
     -> Odoo XML-RPC
     -> Chatwoot Application API private note
+
+Chatwoot Dashboard App iframe
+    -> /dashboard
+    -> /api/dashboard/search
+    -> Odoo XML-RPC
 ```
 
 Why this shape:
@@ -43,6 +53,7 @@ CHATWOOT_BASE_URL=https://chat.example.com
 CHATWOOT_ACCOUNT_ID=1
 CHATWOOT_API_ACCESS_TOKEN=...
 CHATWOOT_WEBHOOK_SECRET=...
+DASHBOARD_APP_TOKEN=choose-a-long-random-token
 
 ODOO_URL=https://engosoft.com
 ODOO_DB=...
@@ -82,6 +93,27 @@ message_created
 
 `message_created` is ignored by default unless `CHATWOOT_SYNC_ON_MESSAGE_CREATED=true`.
 
+## Chatwoot Dashboard App
+
+In Chatwoot:
+
+1. Go to Settings -> Integrations -> Dashboard apps.
+2. Add a dashboard app named `Odoo`.
+3. Use this URL:
+
+```text
+https://your-bridge-domain.com/dashboard?token=YOUR_DASHBOARD_APP_TOKEN
+```
+
+The dashboard app will:
+
+- Receive the current conversation context from Chatwoot.
+- Auto-search Odoo using the contact email or phone.
+- Let agents manually search by name, email, or phone.
+- Show contact, CRM, and sales order tabs.
+- Support Auto, Light, and Dark themes.
+- Add a private note to the conversation when the agent clicks `Add private note`.
+
 ## Odoo access
 
 Create a dedicated Odoo user with read access to:
@@ -104,4 +136,3 @@ docker compose up --build -d
 ```powershell
 pytest
 ```
-

@@ -38,29 +38,54 @@ def _normalize_url(value: str) -> str:
 
 @dataclass(frozen=True)
 class Settings:
-    app_env: str = _env("APP_ENV", "development")
-    log_level: str = _env("LOG_LEVEL", "INFO")
+    app_env: str
+    log_level: str
 
-    chatwoot_base_url: str = _normalize_url(_env("CHATWOOT_BASE_URL"))
-    chatwoot_account_id: int = _env_int("CHATWOOT_ACCOUNT_ID", 0)
-    chatwoot_api_access_token: str = _env("CHATWOOT_API_ACCESS_TOKEN")
-    chatwoot_webhook_secret: str = _env("CHATWOOT_WEBHOOK_SECRET")
-    chatwoot_update_attributes: bool = _env_bool("CHATWOOT_UPDATE_ATTRIBUTES", True)
-    chatwoot_sync_on_message_created: bool = _env_bool(
-        "CHATWOOT_SYNC_ON_MESSAGE_CREATED", False
-    )
+    chatwoot_base_url: str
+    chatwoot_account_id: int
+    chatwoot_api_access_token: str
+    chatwoot_webhook_secret: str
+    chatwoot_update_attributes: bool
+    chatwoot_sync_on_message_created: bool
+    dashboard_app_token: str
 
-    odoo_url: str = _normalize_url(_env("ODOO_URL", "https://engosoft.com"))
-    odoo_db: str = _env("ODOO_DB")
-    odoo_username: str = _env("ODOO_USERNAME")
-    odoo_password: str = _env("ODOO_PASSWORD")
+    odoo_url: str
+    odoo_db: str
+    odoo_username: str
+    odoo_password: str
 
-    allow_unsigned_webhooks: bool = _env_bool("ALLOW_UNSIGNED_WEBHOOKS", False)
-    webhook_tolerance_seconds: int = _env_int("WEBHOOK_TOLERANCE_SECONDS", 300)
-    sync_ttl_seconds: int = _env_int("SYNC_TTL_SECONDS", 1800)
-    max_leads: int = _env_int("MAX_LEADS", 5)
-    max_orders: int = _env_int("MAX_ORDERS", 5)
-    app_state_db_path: Path = Path(_env("APP_STATE_DB_PATH", "data/integration.sqlite3"))
+    allow_unsigned_webhooks: bool
+    webhook_tolerance_seconds: int
+    sync_ttl_seconds: int
+    max_leads: int
+    max_orders: int
+    app_state_db_path: Path
+
+    @classmethod
+    def from_env(cls) -> "Settings":
+        return cls(
+            app_env=_env("APP_ENV", "development"),
+            log_level=_env("LOG_LEVEL", "INFO"),
+            chatwoot_base_url=_normalize_url(_env("CHATWOOT_BASE_URL")),
+            chatwoot_account_id=_env_int("CHATWOOT_ACCOUNT_ID", 0),
+            chatwoot_api_access_token=_env("CHATWOOT_API_ACCESS_TOKEN"),
+            chatwoot_webhook_secret=_env("CHATWOOT_WEBHOOK_SECRET"),
+            chatwoot_update_attributes=_env_bool("CHATWOOT_UPDATE_ATTRIBUTES", True),
+            chatwoot_sync_on_message_created=_env_bool(
+                "CHATWOOT_SYNC_ON_MESSAGE_CREATED", False
+            ),
+            dashboard_app_token=_env("DASHBOARD_APP_TOKEN"),
+            odoo_url=_normalize_url(_env("ODOO_URL", "https://engosoft.com")),
+            odoo_db=_env("ODOO_DB"),
+            odoo_username=_env("ODOO_USERNAME"),
+            odoo_password=_env("ODOO_PASSWORD"),
+            allow_unsigned_webhooks=_env_bool("ALLOW_UNSIGNED_WEBHOOKS", False),
+            webhook_tolerance_seconds=_env_int("WEBHOOK_TOLERANCE_SECONDS", 300),
+            sync_ttl_seconds=_env_int("SYNC_TTL_SECONDS", 1800),
+            max_leads=_env_int("MAX_LEADS", 5),
+            max_orders=_env_int("MAX_ORDERS", 5),
+            app_state_db_path=Path(_env("APP_STATE_DB_PATH", "data/integration.sqlite3")),
+        )
 
     def missing_required(self) -> list[str]:
         missing: list[str] = []
@@ -85,4 +110,4 @@ class Settings:
 
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
-    return Settings()
+    return Settings.from_env()
