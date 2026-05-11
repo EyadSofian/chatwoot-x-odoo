@@ -4,6 +4,14 @@ from app.config import get_settings
 from app.main import app
 
 
+def test_index_shows_service_paths():
+    response = TestClient(app).get("/")
+
+    assert response.status_code == 200
+    assert "/dashboard?token=YOUR_DASHBOARD_APP_TOKEN" in response.text
+    assert "/webhooks/chatwoot" in response.text
+
+
 def test_dashboard_loads_without_token_when_token_is_not_configured(monkeypatch):
     monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
     get_settings.cache_clear()

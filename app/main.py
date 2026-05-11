@@ -31,6 +31,74 @@ app.mount(
 )
 
 
+@app.get("/", response_class=HTMLResponse)
+def index() -> HTMLResponse:
+    html = """
+    <!doctype html>
+    <html lang="en">
+      <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Chatwoot Odoo Bridge</title>
+        <style>
+          body {
+            margin: 0;
+            background: #f7f8fa;
+            color: #111827;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+              "Segoe UI", sans-serif;
+          }
+          main {
+            max-width: 760px;
+            margin: 0 auto;
+            padding: 48px 20px;
+          }
+          section {
+            border: 1px solid #d8dee8;
+            border-radius: 8px;
+            background: #ffffff;
+            padding: 22px;
+            box-shadow: 0 12px 34px rgba(15, 23, 42, 0.08);
+          }
+          h1 {
+            margin: 0 0 8px;
+            font-size: 24px;
+          }
+          p {
+            margin: 0 0 18px;
+            color: #64748b;
+          }
+          a {
+            color: #0f7eea;
+            font-weight: 700;
+            text-decoration: none;
+          }
+          code {
+            display: block;
+            margin: 10px 0;
+            overflow-wrap: anywhere;
+            border-radius: 8px;
+            background: #f2f5f8;
+            padding: 10px;
+          }
+        </style>
+      </head>
+      <body>
+        <main>
+          <section>
+            <h1>Chatwoot Odoo Bridge</h1>
+            <p>The service is running. Use these paths in Chatwoot:</p>
+            <code>/dashboard?token=YOUR_DASHBOARD_APP_TOKEN</code>
+            <code>/webhooks/chatwoot</code>
+            <p><a href="/health">Open health check</a></p>
+          </section>
+        </main>
+      </body>
+    </html>
+    """
+    return HTMLResponse(html)
+
+
 @app.get("/health")
 def health() -> dict[str, object]:
     missing = get_settings().missing_required()
