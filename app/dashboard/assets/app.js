@@ -19,12 +19,16 @@
     metricContact: document.getElementById("metricContact"),
     metricLeads: document.getElementById("metricLeads"),
     metricOrders: document.getElementById("metricOrders"),
+    metricInvoices: document.getElementById("metricInvoices"),
+    metricCourses: document.getElementById("metricCourses"),
     matchesPanel: document.getElementById("matchesPanel"),
     matchesCount: document.getElementById("matchesCount"),
     matchesList: document.getElementById("matchesList"),
     contactDetails: document.getElementById("contactDetails"),
     leadsList: document.getElementById("leadsList"),
     ordersList: document.getElementById("ordersList"),
+    invoicesList: document.getElementById("invoicesList"),
+    coursesList: document.getElementById("coursesList"),
     emptyTemplate: document.getElementById("emptyTemplate"),
   };
 
@@ -230,23 +234,101 @@
     });
   }
 
+  function renderInvoices(invoices) {
+    clearNode(els.invoicesList);
+    if (!invoices || invoices.length === 0) {
+      els.invoicesList.appendChild(emptyNode());
+      return;
+    }
+
+    invoices.forEach((invoice) => {
+      const item = document.createElement("article");
+      item.className = "record-item";
+
+      item.innerHTML = `
+        <p class="record-title"></p>
+        <p class="record-meta"></p>
+      `;
+      item.querySelector(".record-title").textContent = valueOrDash(invoice.name);
+      item.querySelector(".record-meta").textContent = [
+        `State: ${valueOrDash(invoice.state)}`,
+        `Payment: ${valueOrDash(invoice.payment_state)}`,
+        `Total: ${money(invoice.amount_total, invoice.currency_id)}`,
+        `Due: ${money(invoice.amount_residual, invoice.currency_id)}`,
+      ].join(" | ");
+
+      (invoice.lines || []).slice(0, 4).forEach((line) => {
+        const lineItem = document.createElement("p");
+        lineItem.className = "line-item";
+        lineItem.textContent = `${valueOrDash(line.product_id || line.name)} x ${
+          line.quantity || 0
+        } - ${money(line.price_subtotal, invoice.currency_id)}`;
+        item.appendChild(lineItem);
+      });
+
+      els.invoicesList.appendChild(item);
+    });
+  }
+
+  function renderCourses(courses) {
+    clearNode(els.coursesList);
+    if (!courses || courses.length === 0) {
+      els.coursesList.appendChild(emptyNode());
+      return;
+    }
+
+    courses.forEach((course) => {
+      const item = document.createElement("article");
+      item.className = "record-item";
+      const completion = Number(course.completion || 0);
+
+      item.innerHTML = `
+        <p class="record-title"></p>
+        <p class="record-meta"></p>
+        <div class="progress-track"><span class="progress-bar"></span></div>
+      `;
+      item.querySelector(".record-title").textContent = valueOrDash(course.channel_id);
+      item.querySelector(".record-meta").textContent = [
+        `Status: ${valueOrDash(course.member_status)}`,
+        `Progress: ${completion.toFixed(0)}%`,
+        `Completed slides: ${valueOrDash(course.completed_slides_count)}`,
+        `Next: ${valueOrDash(course.next_slide_id)}`,
+      ].join(" | ");
+      item.querySelector(".progress-bar").style.width = `${Math.max(
+        0,
+        Math.min(100, completion)
+      )}%`;
+
+      els.coursesList.appendChild(item);
+    });
+  }
+
   function renderSnapshot(snapshot) {
     state.snapshot = snapshot;
     const partner = snapshot.partner || null;
     const leads = snapshot.leads || [];
     const orders = snapshot.orders || [];
+    const invoices = snapshot.invoices || [];
+    const courses = snapshot.courses || [];
+    const warnings = snapshot.warnings || [];
 
     els.metricContact.textContent = partner ? valueOrDash(partner.name) : "-";
     els.metricLeads.textContent = String(leads.length);
     els.metricOrders.textContent = String(orders.length);
+    els.metricInvoices.textContent = String(invoices.length);
+    els.metricCourses.textContent = String(courses.length);
     els.noteButton.disabled = !state.lastLookup.conversationId;
 
     renderMatches(snapshot.matches || []);
     renderContact(partner);
     renderLeads(leads);
     renderOrders(orders);
+    renderInvoices(invoices);
+    renderCourses(courses);
 
-    if (partner) {
+    if (partner && warnings.length > 0) {
+      setStatus("warning", `Matched ${valueOrDash(partner.name)}. Some optional Odoo data is unavailable.`);
+    } else if (partner) {
       setStatus("success", `Matched ${valueOrDash(partner.name)} in Odoo.`);
     } else {
       setStatus("warning", "No matching Odoo contact found.");

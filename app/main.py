@@ -128,7 +128,15 @@ async def dashboard_search(
     verify_dashboard_access(request=request, token=token, settings=current_settings)
 
     if not any([q, email, phone, partner_id]):
-        return {"partner": None, "matches": [], "leads": [], "orders": []}
+        return {
+            "partner": None,
+            "matches": [],
+            "leads": [],
+            "orders": [],
+            "invoices": [],
+            "courses": [],
+            "warnings": [],
+        }
 
     missing = [
         name

@@ -107,6 +107,7 @@ h2 {
 .topbar-actions,
 .tab-list {
   display: inline-flex;
+  flex-wrap: wrap;
   gap: 4px;
   padding: 3px;
   border: 1px solid var(--border);
@@ -245,7 +246,7 @@ input:focus {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -327,6 +328,21 @@ input:focus {
   font-size: 12px;
 }
 
+.progress-track {
+  height: 8px;
+  margin-top: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--border);
+}
+
+.progress-bar {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--primary);
+}
+
 .details-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   margin: 0;
@@ -373,10 +389,15 @@ input:focus {
     flex-direction: column;
   }
 
-  .topbar-actions,
-  .tab-list {
+  .topbar-actions {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
+    width: 100%;
+  }
+
+  .tab-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     width: 100%;
   }
 

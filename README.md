@@ -12,6 +12,9 @@ The first production path is read-only toward Odoo:
 - Search contacts manually by name, email, or phone.
 - Show related `crm.lead` records.
 - Show recent `sale.order` records and their lines.
+- Show recent customer invoices from `account.move` and invoice lines.
+- Show eLearning course memberships from `slide.channel.partner`, including
+  progress percentage and next lesson.
 - Optionally update Chatwoot conversation custom attributes for filtering.
 - Optionally add the current Odoo snapshot to the conversation as a private note.
 
@@ -110,7 +113,7 @@ The dashboard app will:
 - Receive the current conversation context from Chatwoot.
 - Auto-search Odoo using the contact email or phone.
 - Let agents manually search by name, email, or phone.
-- Show contact, CRM, and sales order tabs.
+- Show contact, CRM, sales order, invoice, and course tabs.
 - Support Auto, Light, and Dark themes.
 - Add a private note to the conversation when the agent clicks `Add private note`.
 
@@ -121,8 +124,14 @@ Create a dedicated Odoo user with read access to:
 - Contacts
 - CRM
 - Sales
+- Invoicing / Accounting
+- eLearning / Website Slides
 
 Use that user in `.env`. Keep write permissions off until we add create/update flows.
+
+Invoices and courses are optional reads. If the Odoo user lacks access or the eLearning
+module is not installed, the dashboard still renders the rest of the customer snapshot
+and marks optional data as unavailable.
 
 ## Docker
 

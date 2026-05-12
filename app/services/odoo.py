@@ -93,6 +93,23 @@ class OdooClient:
             kwargs["order"] = order
         return self.execute_kw(model, "search_read", [domain], kwargs)
 
+    def optional_search_read(
+        self,
+        model: str,
+        domain: list[Any],
+        fields: list[str],
+        *,
+        limit: int,
+        order: str | None = None,
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            return self.search_read(model, domain, fields, limit=limit, order=order), None
+        except xmlrpc.client.Fault as exc:
+            logger.warning("Optional Odoo model %s could not be read: %s", model, exc)
+            fault_lines = exc.faultString.splitlines()
+            fault_summary = fault_lines[-1] if fault_lines else str(exc)
+            return [], f"{model}: {fault_summary}"
+
     def read_records(
         self,
         model: str,
@@ -256,6 +273,85 @@ class OdooClient:
             order["lines"] = lines_by_order.get(int(order["id"]), [])
         return orders
 
+    def get_invoices(self, *, partner_id: int | None) -> tuple[list[dict[str, Any]], str | None]:
+        if not partner_id:
+            return [], None
+
+        invoices, warning = self.optional_search_read(
+            "account.move",
+            [
+                ["partner_id", "child_of", partner_id],
+                ["move_type", "in", ["out_invoice", "out_refund"]],
+            ],
+            [
+                "id",
+                "name",
+                "move_type",
+                "state",
+                "invoice_date",
+                "invoice_date_due",
+                "amount_total",
+                "amount_residual",
+                "currency_id",
+                "payment_state",
+                "invoice_origin",
+            ],
+            limit=self.settings.max_invoices,
+            order="invoice_date desc, id desc",
+        )
+        if warning or not invoices:
+            return invoices, warning
+
+        invoice_ids = [invoice["id"] for invoice in invoices]
+        lines, lines_warning = self.optional_search_read(
+            "account.move.line",
+            [
+                ["move_id", "in", invoice_ids],
+                ["display_type", "not in", ["line_section", "line_note"]],
+            ],
+            [
+                "move_id",
+                "product_id",
+                "name",
+                "quantity",
+                "price_unit",
+                "price_subtotal",
+            ],
+            limit=self.settings.max_invoices * 10,
+            order="id asc",
+        )
+        lines_by_invoice: dict[int, list[dict[str, Any]]] = {}
+        for line in lines:
+            move_ref = line.get("move_id")
+            if isinstance(move_ref, list | tuple) and move_ref:
+                lines_by_invoice.setdefault(int(move_ref[0]), []).append(line)
+
+        for invoice in invoices:
+            invoice["lines"] = lines_by_invoice.get(int(invoice["id"]), [])
+
+        return invoices, lines_warning
+
+    def get_courses(self, *, partner_id: int | None) -> tuple[list[dict[str, Any]], str | None]:
+        if not partner_id:
+            return [], None
+
+        courses, warning = self.optional_search_read(
+            "slide.channel.partner",
+            [["partner_id", "=", partner_id]],
+            [
+                "id",
+                "channel_id",
+                "member_status",
+                "completion",
+                "completed_slides_count",
+                "next_slide_id",
+                "partner_id",
+            ],
+            limit=self.settings.max_courses,
+            order="write_date desc",
+        )
+        return courses, warning
+
     def customer_snapshot(
         self,
         *,
@@ -280,11 +376,24 @@ class OdooClient:
         lookup_phone = phone or (partner or {}).get("phone") or (partner or {}).get("mobile")
         leads = self.get_leads(partner_id=partner_id, email=lookup_email, phone=lookup_phone)
         orders = self.get_sale_orders(partner_id=partner_id)
+        invoices, invoices_warning = self.get_invoices(partner_id=partner_id)
+        courses, courses_warning = self.get_courses(partner_id=partner_id)
+        warnings = [warning for warning in [invoices_warning, courses_warning] if warning]
 
         logger.info(
-            "Odoo snapshot loaded partner=%s leads=%s orders=%s",
+            "Odoo snapshot loaded partner=%s leads=%s orders=%s invoices=%s courses=%s",
             partner_id,
             len(leads),
             len(orders),
+            len(invoices),
+            len(courses),
         )
-        return {"partner": partner, "matches": matches, "leads": leads, "orders": orders}
+        return {
+            "partner": partner,
+            "matches": matches,
+            "leads": leads,
+            "orders": orders,
+            "invoices": invoices,
+            "courses": courses,
+            "warnings": warnings,
+        }

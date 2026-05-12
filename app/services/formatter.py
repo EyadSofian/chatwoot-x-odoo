@@ -27,6 +27,9 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     partner = snapshot.get("partner")
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", [])
+    invoices = snapshot.get("invoices", [])
+    courses = snapshot.get("courses", [])
+    warnings = snapshot.get("warnings", [])
 
     lines: list[str] = ["Odoo customer snapshot"]
     lookup_bits = []
@@ -75,6 +78,40 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
                 subtotal = _money(order_line.get("price_subtotal"), order.get("currency_id"))
                 lines.append(f"  * {product} x {qty}: {subtotal}")
 
+    lines.append("")
+    lines.append(f"Recent invoices: {len(invoices)}")
+    if invoices:
+        for invoice in invoices[:5]:
+            total = _money(invoice.get("amount_total"), invoice.get("currency_id"))
+            due = _money(invoice.get("amount_residual"), invoice.get("currency_id"))
+            lines.append(
+                f"- {invoice.get('name')} | {invoice.get('state') or '-'} | "
+                f"{invoice.get('payment_state') or '-'} | total: {total} | due: {due}"
+            )
+            for invoice_line in invoice.get("lines", [])[:3]:
+                product = _name(invoice_line.get("product_id")) or invoice_line.get("name") or "-"
+                qty = invoice_line.get("quantity") or 0
+                subtotal = _money(invoice_line.get("price_subtotal"), invoice.get("currency_id"))
+                lines.append(f"  * {product} x {qty}: {subtotal}")
+
+    lines.append("")
+    lines.append(f"Courses: {len(courses)}")
+    if courses:
+        for course in courses[:5]:
+            completion = course.get("completion") or 0
+            status = course.get("member_status") or "-"
+            next_lesson = _name(course.get("next_slide_id"))
+            lines.append(
+                f"- {_name(course.get('channel_id'))} | {status} | "
+                f"{completion}% complete | next: {next_lesson}"
+            )
+
+    if warnings:
+        lines.append("")
+        lines.append("Warnings:")
+        for warning in warnings[:3]:
+            lines.append(f"- {warning}")
+
     return "\n".join(lines)
 
 
@@ -82,11 +119,15 @@ def conversation_attributes(snapshot: dict[str, Any]) -> dict[str, Any]:
     partner = snapshot.get("partner")
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", [])
+    invoices = snapshot.get("invoices", [])
+    courses = snapshot.get("courses", [])
 
     attrs: dict[str, Any] = {
         "odoo_match_found": bool(partner),
         "odoo_leads_count": len(leads),
         "odoo_orders_count": len(orders),
+        "odoo_invoices_count": len(invoices),
+        "odoo_courses_count": len(courses),
     }
 
     if partner:
@@ -98,5 +139,13 @@ def conversation_attributes(snapshot: dict[str, Any]) -> dict[str, Any]:
         attrs["odoo_last_order_state"] = orders[0].get("state") or ""
         attrs["odoo_last_order_total"] = str(orders[0].get("amount_total") or 0)
 
-    return attrs
+    if invoices:
+        attrs["odoo_last_invoice"] = invoices[0].get("name") or ""
+        attrs["odoo_last_invoice_payment_state"] = invoices[0].get("payment_state") or ""
+        attrs["odoo_last_invoice_due"] = str(invoices[0].get("amount_residual") or 0)
 
+    if courses:
+        attrs["odoo_last_course"] = _name(courses[0].get("channel_id"))
+        attrs["odoo_last_course_completion"] = str(courses[0].get("completion") or 0)
+
+    return attrs

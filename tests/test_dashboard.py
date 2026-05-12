@@ -38,4 +38,12 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
     response = TestClient(app).get("/api/dashboard/search")
 
     assert response.status_code == 200
-    assert response.json() == {"partner": None, "matches": [], "leads": [], "orders": []}
+    assert response.json() == {
+        "partner": None,
+        "matches": [],
+        "leads": [],
+        "orders": [],
+        "invoices": [],
+        "courses": [],
+        "warnings": [],
+    }
