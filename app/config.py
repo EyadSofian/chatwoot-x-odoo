@@ -45,6 +45,7 @@ class Settings:
     chatwoot_account_id: int
     chatwoot_api_access_token: str
     chatwoot_webhook_secret: str
+    chatwoot_auto_private_notes: bool
     chatwoot_update_attributes: bool
     chatwoot_sync_on_message_created: bool
     dashboard_app_token: str
@@ -72,6 +73,7 @@ class Settings:
             chatwoot_account_id=_env_int("CHATWOOT_ACCOUNT_ID", 0),
             chatwoot_api_access_token=_env("CHATWOOT_API_ACCESS_TOKEN"),
             chatwoot_webhook_secret=_env("CHATWOOT_WEBHOOK_SECRET"),
+            chatwoot_auto_private_notes=_env_bool("CHATWOOT_AUTO_PRIVATE_NOTES", False),
             chatwoot_update_attributes=_env_bool("CHATWOOT_UPDATE_ATTRIBUTES", True),
             chatwoot_sync_on_message_created=_env_bool(
                 "CHATWOOT_SYNC_ON_MESSAGE_CREATED", False

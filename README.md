@@ -1,7 +1,7 @@
 # Chatwoot Odoo Bridge
 
-FastAPI service that receives Chatwoot webhooks, looks up the customer in Odoo 17,
-then writes an Odoo summary back to the Chatwoot conversation as a private note.
+FastAPI service that receives Chatwoot webhooks and serves an embedded Chatwoot
+Dashboard App for looking up customer data in Odoo 17.
 
 It also serves a Chatwoot Dashboard App at `/dashboard`, so agents can view and
 search Odoo data inside the Chatwoot conversation screen.
@@ -56,6 +56,7 @@ CHATWOOT_BASE_URL=https://chat.example.com
 CHATWOOT_ACCOUNT_ID=1
 CHATWOOT_API_ACCESS_TOKEN=...
 CHATWOOT_WEBHOOK_SECRET=...
+CHATWOOT_AUTO_PRIVATE_NOTES=false
 DASHBOARD_APP_TOKEN=choose-a-long-random-token
 
 ODOO_URL=https://engosoft.com
@@ -95,6 +96,13 @@ message_created
 ```
 
 `message_created` is ignored by default unless `CHATWOOT_SYNC_ON_MESSAGE_CREATED=true`.
+
+Automatic private notes are disabled by default. Keep this setting off if agents
+should only create notes manually from the dashboard button:
+
+```env
+CHATWOOT_AUTO_PRIVATE_NOTES=false
+```
 
 ## Chatwoot Dashboard App
 
