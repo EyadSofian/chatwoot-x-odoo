@@ -33,6 +33,9 @@ def test_dashboard_rejects_invalid_token(monkeypatch):
 
 def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
     monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
+    monkeypatch.delenv("SENSITIVE_DATA_ALLOWED_AGENT_EMAILS", raising=False)
+    monkeypatch.delenv("SENSITIVE_DATA_ALLOWED_AGENT_IDS", raising=False)
+    monkeypatch.delenv("SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS", raising=False)
     get_settings.cache_clear()
 
     response = TestClient(app).get("/api/dashboard/search")
@@ -46,4 +49,18 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
         "invoices": [],
         "courses": [],
         "warnings": [],
+        "restricted_sections": ["invoices", "orders"],
     }
+
+
+def test_dashboard_search_allows_sensitive_sections_for_allowed_agent(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
+    monkeypatch.setenv("SENSITIVE_DATA_ALLOWED_AGENT_EMAILS", "manager@example.com")
+    get_settings.cache_clear()
+
+    response = TestClient(app).get(
+        "/api/dashboard/search?agent_email=manager@example.com"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["restricted_sections"] == []

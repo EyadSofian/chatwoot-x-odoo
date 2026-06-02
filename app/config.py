@@ -28,6 +28,13 @@ def _env_bool(name: str, default: bool = False) -> bool:
     return value.lower() in {"1", "true", "yes", "on"}
 
 
+def _env_set(name: str, default: str = "") -> frozenset[str]:
+    value = _env(name, default)
+    if not value:
+        return frozenset()
+    return frozenset(item.strip().lower() for item in value.split(",") if item.strip())
+
+
 def _normalize_url(value: str) -> str:
     if not value:
         return ""
@@ -47,8 +54,13 @@ class Settings:
     chatwoot_webhook_secret: str
     chatwoot_auto_private_notes: bool
     chatwoot_update_attributes: bool
+    chatwoot_update_sensitive_attributes: bool
     chatwoot_sync_on_message_created: bool
     dashboard_app_token: str
+    sensitive_data_allowed_agent_emails: frozenset[str]
+    sensitive_data_allowed_agent_ids: frozenset[str]
+    sensitive_data_allowed_agent_domains: frozenset[str]
+    restricted_dashboard_sections: frozenset[str]
 
     odoo_url: str
     odoo_db: str
@@ -75,10 +87,23 @@ class Settings:
             chatwoot_webhook_secret=_env("CHATWOOT_WEBHOOK_SECRET"),
             chatwoot_auto_private_notes=_env_bool("CHATWOOT_AUTO_PRIVATE_NOTES", False),
             chatwoot_update_attributes=_env_bool("CHATWOOT_UPDATE_ATTRIBUTES", True),
+            chatwoot_update_sensitive_attributes=_env_bool(
+                "CHATWOOT_UPDATE_SENSITIVE_ATTRIBUTES", False
+            ),
             chatwoot_sync_on_message_created=_env_bool(
                 "CHATWOOT_SYNC_ON_MESSAGE_CREATED", False
             ),
             dashboard_app_token=_env("DASHBOARD_APP_TOKEN"),
+            sensitive_data_allowed_agent_emails=_env_set(
+                "SENSITIVE_DATA_ALLOWED_AGENT_EMAILS"
+            ),
+            sensitive_data_allowed_agent_ids=_env_set("SENSITIVE_DATA_ALLOWED_AGENT_IDS"),
+            sensitive_data_allowed_agent_domains=_env_set(
+                "SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS"
+            ),
+            restricted_dashboard_sections=_env_set(
+                "RESTRICTED_DASHBOARD_SECTIONS", "orders,invoices"
+            ),
             odoo_url=_normalize_url(_env("ODOO_URL", "https://engosoft.com")),
             odoo_db=_env("ODOO_DB"),
             odoo_username=_env("ODOO_USERNAME"),

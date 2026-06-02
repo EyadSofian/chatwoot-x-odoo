@@ -30,6 +30,7 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     invoices = snapshot.get("invoices", [])
     courses = snapshot.get("courses", [])
     warnings = snapshot.get("warnings", [])
+    restricted_sections = snapshot.get("restricted_sections", [])
 
     lines: list[str] = ["Odoo customer snapshot"]
     lookup_bits = []
@@ -65,8 +66,11 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
             lines.append(f"- #{lead.get('id')} {lead.get('name') or '-'} | {stage} | {revenue}")
 
     lines.append("")
-    lines.append(f"Recent sales orders: {len(orders)}")
-    if orders:
+    if "orders" in restricted_sections:
+        lines.append("Recent sales orders: restricted for current agent")
+    else:
+        lines.append(f"Recent sales orders: {len(orders)}")
+    if orders and "orders" not in restricted_sections:
         for order in orders[:5]:
             state = order.get("state") or "-"
             total = _money(order.get("amount_total"), order.get("currency_id"))
@@ -79,8 +83,11 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
                 lines.append(f"  * {product} x {qty}: {subtotal}")
 
     lines.append("")
-    lines.append(f"Recent invoices: {len(invoices)}")
-    if invoices:
+    if "invoices" in restricted_sections:
+        lines.append("Recent invoices: restricted for current agent")
+    else:
+        lines.append(f"Recent invoices: {len(invoices)}")
+    if invoices and "invoices" not in restricted_sections:
         for invoice in invoices[:5]:
             total = _money(invoice.get("amount_total"), invoice.get("currency_id"))
             due = _money(invoice.get("amount_residual"), invoice.get("currency_id"))
@@ -115,20 +122,26 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     return "\n".join(lines)
 
 
-def conversation_attributes(snapshot: dict[str, Any]) -> dict[str, Any]:
+def conversation_attributes(
+    snapshot: dict[str, Any],
+    *,
+    include_sensitive: bool = True,
+) -> dict[str, Any]:
     partner = snapshot.get("partner")
     leads = snapshot.get("leads", [])
-    orders = snapshot.get("orders", [])
-    invoices = snapshot.get("invoices", [])
+    orders = snapshot.get("orders", []) if include_sensitive else []
+    invoices = snapshot.get("invoices", []) if include_sensitive else []
     courses = snapshot.get("courses", [])
 
     attrs: dict[str, Any] = {
         "odoo_match_found": bool(partner),
         "odoo_leads_count": len(leads),
-        "odoo_orders_count": len(orders),
-        "odoo_invoices_count": len(invoices),
         "odoo_courses_count": len(courses),
     }
+
+    if include_sensitive:
+        attrs["odoo_orders_count"] = len(orders)
+        attrs["odoo_invoices_count"] = len(invoices)
 
     if partner:
         attrs["odoo_partner_id"] = str(partner.get("id"))

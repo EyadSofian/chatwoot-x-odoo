@@ -55,6 +55,8 @@ async def process_chatwoot_webhook(
         OdooClient(settings).customer_snapshot,
         email=context.email,
         phone=context.phone,
+        include_orders=settings.chatwoot_update_sensitive_attributes,
+        include_invoices=settings.chatwoot_update_sensitive_attributes,
     )
 
     note_created = False
@@ -68,7 +70,10 @@ async def process_chatwoot_webhook(
         try:
             await chatwoot.update_conversation_attributes(
                 conversation_id=context.conversation_id,
-                attributes=conversation_attributes(snapshot),
+                attributes=conversation_attributes(
+                    snapshot,
+                    include_sensitive=settings.chatwoot_update_sensitive_attributes,
+                ),
             )
             attributes_updated = True
         except Exception:

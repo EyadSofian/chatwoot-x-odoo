@@ -79,14 +79,29 @@
     );
   }
 
+  function findCurrentAgent(payload) {
+    return (
+      payload.currentAgent ||
+      payload.current_agent ||
+      payload.appContext?.currentAgent ||
+      payload.data?.currentAgent ||
+      payload.data?.current_agent ||
+      {}
+    );
+  }
+
   function contextLookup(payload) {
     const conversation = findConversation(payload) || {};
     const contact = findContact(payload);
+    const currentAgent = findCurrentAgent(payload);
     return {
       conversationId: conversation.id || payload.conversation_id || null,
       contactName: contact.name || "",
       email: contact.email || "",
       phone: contact.phone_number || contact.phone || contact.mobile || "",
+      agentEmail: currentAgent.email || "",
+      agentId: currentAgent.id || "",
+      agentName: currentAgent.name || "",
     };
   }
 
@@ -115,6 +130,12 @@
 
   function emptyNode() {
     return els.emptyTemplate.content.firstElementChild.cloneNode(true);
+  }
+
+  function restrictedNode(sectionName) {
+    const node = emptyNode();
+    node.querySelector("p").textContent = `${sectionName} are restricted for the current agent.`;
+    return node;
   }
 
   function detail(label, value) {
@@ -199,8 +220,12 @@
     });
   }
 
-  function renderOrders(orders) {
+  function renderOrders(orders, restricted) {
     clearNode(els.ordersList);
+    if (restricted) {
+      els.ordersList.appendChild(restrictedNode("Sales orders"));
+      return;
+    }
     if (!orders || orders.length === 0) {
       els.ordersList.appendChild(emptyNode());
       return;
@@ -234,8 +259,12 @@
     });
   }
 
-  function renderInvoices(invoices) {
+  function renderInvoices(invoices, restricted) {
     clearNode(els.invoicesList);
+    if (restricted) {
+      els.invoicesList.appendChild(restrictedNode("Invoices"));
+      return;
+    }
     if (!invoices || invoices.length === 0) {
       els.invoicesList.appendChild(emptyNode());
       return;
@@ -311,22 +340,30 @@
     const invoices = snapshot.invoices || [];
     const courses = snapshot.courses || [];
     const warnings = snapshot.warnings || [];
+    const restrictedSections = snapshot.restricted_sections || [];
 
     els.metricContact.textContent = partner ? valueOrDash(partner.name) : "-";
     els.metricLeads.textContent = String(leads.length);
-    els.metricOrders.textContent = String(orders.length);
-    els.metricInvoices.textContent = String(invoices.length);
+    els.metricOrders.textContent = restrictedSections.includes("orders") ? "Locked" : String(orders.length);
+    els.metricInvoices.textContent = restrictedSections.includes("invoices")
+      ? "Locked"
+      : String(invoices.length);
     els.metricCourses.textContent = String(courses.length);
     els.noteButton.disabled = !state.lastLookup.conversationId;
 
     renderMatches(snapshot.matches || []);
     renderContact(partner);
     renderLeads(leads);
-    renderOrders(orders);
-    renderInvoices(invoices);
+    renderOrders(orders, restrictedSections.includes("orders"));
+    renderInvoices(invoices, restrictedSections.includes("invoices"));
     renderCourses(courses);
 
-    if (partner && warnings.length > 0) {
+    if (partner && restrictedSections.length > 0) {
+      setStatus(
+        "warning",
+        `Matched ${valueOrDash(partner.name)}. Sensitive sections are restricted for this agent.`
+      );
+    } else if (partner && warnings.length > 0) {
       setStatus("warning", `Matched ${valueOrDash(partner.name)}. Some optional Odoo data is unavailable.`);
     } else if (partner) {
       setStatus("success", `Matched ${valueOrDash(partner.name)} in Odoo.`);
@@ -356,6 +393,9 @@
       email: options?.email || "",
       phone: options?.phone || "",
       partner_id: options?.partnerId || "",
+      agent_email: state.lastLookup.agentEmail || "",
+      agent_id: state.lastLookup.agentId || "",
+      agent_name: state.lastLookup.agentName || "",
     };
     state.selectedPartnerId = params.partner_id || null;
     state.lastLookup = { ...state.lastLookup, ...params };
@@ -378,6 +418,7 @@
       lookup.contactName || "Unknown contact",
       lookup.email || "",
       lookup.phone || "",
+      lookup.agentEmail ? `agent: ${lookup.agentEmail}` : "",
     ]
       .filter(Boolean)
       .join(" | ");
@@ -399,6 +440,9 @@
       email: state.lastLookup.email || "",
       phone: state.lastLookup.phone || "",
       partner_id: state.selectedPartnerId || state.lastLookup.partner_id || null,
+      agent_email: state.lastLookup.agentEmail || "",
+      agent_id: state.lastLookup.agentId || "",
+      agent_name: state.lastLookup.agentName || "",
     };
 
     try {

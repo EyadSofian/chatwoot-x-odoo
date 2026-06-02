@@ -7,6 +7,7 @@ class DummySettings:
     chatwoot_sync_on_message_created = False
     chatwoot_auto_private_notes = False
     chatwoot_update_attributes = False
+    chatwoot_update_sensitive_attributes = False
     sync_ttl_seconds = 1800
 
 

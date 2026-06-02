@@ -65,3 +65,27 @@ def test_formats_snapshot_and_attributes():
     assert attrs["odoo_partner_id"] == "5"
     assert attrs["odoo_invoices_count"] == 1
     assert attrs["odoo_courses_count"] == 1
+
+
+def test_formats_restricted_sections_without_implying_zero_records():
+    snapshot = {
+        "partner": {
+            "id": 5,
+            "name": "Alice",
+            "email": "alice@example.com",
+            "phone": False,
+            "mobile": False,
+            "company_name": False,
+            "commercial_partner_id": [5, "Alice"],
+        },
+        "leads": [],
+        "orders": [],
+        "invoices": [],
+        "courses": [],
+        "restricted_sections": ["orders", "invoices"],
+    }
+
+    note = format_customer_note(snapshot, lookup_email="alice@example.com", lookup_phone=None)
+
+    assert "Recent sales orders: restricted" in note
+    assert "Recent invoices: restricted" in note

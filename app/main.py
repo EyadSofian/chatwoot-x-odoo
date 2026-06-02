@@ -16,6 +16,7 @@ from app.services.dashboard import (
     fetch_dashboard_snapshot,
     verify_dashboard_access,
 )
+from app.services.permissions import AgentContext, restricted_sections_for
 from app.services.state import StateStore
 from app.services.sync import process_chatwoot_webhook
 
@@ -123,11 +124,15 @@ async def dashboard_search(
     email: Annotated[str | None, Query(max_length=200)] = None,
     phone: Annotated[str | None, Query(max_length=80)] = None,
     partner_id: Annotated[int | None, Query()] = None,
+    agent_email: Annotated[str | None, Query(max_length=200)] = None,
+    agent_id: Annotated[str | None, Query(max_length=80)] = None,
+    agent_name: Annotated[str | None, Query(max_length=200)] = None,
 ) -> dict[str, object]:
     current_settings = get_settings()
     verify_dashboard_access(request=request, token=token, settings=current_settings)
 
     if not any([q, email, phone, partner_id]):
+        agent = AgentContext(email=agent_email, agent_id=agent_id, name=agent_name)
         return {
             "partner": None,
             "matches": [],
@@ -136,6 +141,7 @@ async def dashboard_search(
             "invoices": [],
             "courses": [],
             "warnings": [],
+            "restricted_sections": restricted_sections_for(agent, current_settings),
         }
 
     missing = [
@@ -152,6 +158,9 @@ async def dashboard_search(
         email=email,
         phone=phone,
         partner_id=partner_id,
+        agent_email=agent_email,
+        agent_id=agent_id,
+        agent_name=agent_name,
     )
 
 
@@ -176,6 +185,9 @@ async def dashboard_create_note(
         email=payload.get("email"),
         phone=payload.get("phone"),
         partner_id=payload.get("partner_id"),
+        agent_email=payload.get("agent_email"),
+        agent_id=payload.get("agent_id"),
+        agent_name=payload.get("agent_name"),
     )
 
 

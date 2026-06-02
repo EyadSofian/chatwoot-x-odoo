@@ -23,7 +23,7 @@ def _or_domain(clauses: list[list[Any]]) -> list[Any]:
     return ["|"] * (len(clauses) - 1) + clauses
 
 
-PARTNER_FIELDS = [
+PARTNER_BASE_FIELDS = [
     "id",
     "name",
     "email",
@@ -36,6 +36,54 @@ PARTNER_FIELDS = [
     "country_id",
     "customer_rank",
 ]
+OPTIONAL_PARTNER_FIELDS = ["phone_sanitized"]
+
+
+def _phone_tokens(value: str | None) -> list[str]:
+    digits = _digits(value)
+    if not digits:
+        return []
+
+    tokens = {digits}
+    if digits.startswith("00") and len(digits) > 4:
+        tokens.add(digits[2:])
+
+    normalized = digits[2:] if digits.startswith("00") else digits
+    if normalized.startswith("20") and len(normalized) >= 11:
+        tokens.add(normalized[2:])
+        tokens.add(f"0{normalized[2:]}")
+    elif normalized.startswith("0") and len(normalized) >= 10:
+        tokens.add(normalized[1:])
+        tokens.add(f"20{normalized[1:]}")
+
+    for length in (11, 10, 9, 8):
+        if len(normalized) >= length:
+            tokens.add(normalized[-length:])
+
+    return sorted((token for token in tokens if len(token) >= 7), key=len, reverse=True)
+
+
+def _phone_match_score(lookup_values: list[str], partner_values: list[str]) -> int:
+    lookup_tokens = {token for value in lookup_values for token in _phone_tokens(value)}
+    partner_tokens = {token for value in partner_values for token in _phone_tokens(value)}
+    if not lookup_tokens or not partner_tokens:
+        return 0
+
+    if lookup_tokens & partner_tokens:
+        return 120
+
+    for lookup in lookup_tokens:
+        for partner in partner_tokens:
+            if len(lookup) >= 10 and len(partner) >= 10 and (
+                lookup.endswith(partner[-10:]) or partner.endswith(lookup[-10:])
+            ):
+                return 100
+            if len(lookup) >= 9 and len(partner) >= 9 and (
+                lookup.endswith(partner[-9:]) or partner.endswith(lookup[-9:])
+            ):
+                return 80
+
+    return 0
 
 
 class OdooClient:
@@ -93,6 +141,23 @@ class OdooClient:
             kwargs["order"] = order
         return self.execute_kw(model, "search_read", [domain], kwargs)
 
+    @cached_property
+    def partner_fields(self) -> list[str]:
+        try:
+            available = self.execute_kw(
+                "res.partner",
+                "fields_get",
+                [],
+                {"attributes": ["string"]},
+            )
+        except xmlrpc.client.Fault:
+            logger.exception("Could not inspect res.partner fields")
+            return PARTNER_BASE_FIELDS
+
+        fields = list(PARTNER_BASE_FIELDS)
+        fields.extend(field for field in OPTIONAL_PARTNER_FIELDS if field in available)
+        return fields
+
     def optional_search_read(
         self,
         model: str,
@@ -131,27 +196,65 @@ class OdooClient:
         query = (query or "").strip()
 
         if query:
-            clauses.append(["name", "ilike", query])
-            clauses.append(["email", "ilike", query])
-            clauses.append(["phone", "ilike", query])
-            clauses.append(["mobile", "ilike", query])
+            if not _digits(query):
+                clauses.append(["name", "ilike", query])
+                clauses.append(["email", "ilike", query])
 
-            query_digits = _digits(query)
-            if query_digits:
-                phone_token = query_digits[-9:] if len(query_digits) >= 9 else query_digits
-                clauses.append(["phone", "ilike", phone_token])
-                clauses.append(["mobile", "ilike", phone_token])
+            for phone_token in _phone_tokens(query)[:4]:
+                for field in ["phone", "mobile", "phone_sanitized"]:
+                    if field in self.partner_fields:
+                        clauses.append([field, "ilike", phone_token])
 
         if email:
             clauses.append(["email", "=ilike", email])
 
-        phone_digits = _digits(phone)
-        if phone_digits:
-            phone_token = phone_digits[-9:] if len(phone_digits) >= 9 else phone_digits
-            clauses.append(["phone", "ilike", phone_token])
-            clauses.append(["mobile", "ilike", phone_token])
+        for phone_token in _phone_tokens(phone)[:4]:
+            for field in ["phone", "mobile", "phone_sanitized"]:
+                if field in self.partner_fields:
+                    clauses.append([field, "ilike", phone_token])
 
         return _or_domain(clauses)
+
+    def _score_partner(
+        self,
+        partner: dict[str, Any],
+        *,
+        query: str | None,
+        email: str | None,
+        phone: str | None,
+    ) -> int:
+        score = 0
+        partner_email = str(partner.get("email") or "").strip().lower()
+        lookup_email = str(email or "").strip().lower()
+        query_value = str(query or "").strip().lower()
+
+        if lookup_email and partner_email == lookup_email:
+            score += 180
+        elif lookup_email and lookup_email in partner_email:
+            score += 120
+
+        if query_value and not _digits(query_value):
+            name = str(partner.get("name") or "").strip().lower()
+            if name == query_value:
+                score += 110
+            elif query_value in name:
+                score += 70
+            if partner_email and query_value in partner_email:
+                score += 60
+
+        lookup_phones = [value for value in [phone, query] if value and _digits(value)]
+        partner_phones = [
+            str(partner.get(field) or "")
+            for field in ["phone", "mobile", "phone_sanitized"]
+            if partner.get(field)
+        ]
+        score += _phone_match_score(lookup_phones, partner_phones)
+
+        customer_rank = partner.get("customer_rank") or 0
+        if isinstance(customer_rank, int):
+            score += min(customer_rank, 10)
+
+        return score
 
     def search_partners(
         self,
@@ -165,20 +268,30 @@ class OdooClient:
         if not domain:
             return []
 
-        return self.search_read(
+        partners = self.search_read(
             "res.partner",
             domain,
-            PARTNER_FIELDS,
-            limit=limit,
+            self.partner_fields,
+            limit=max(limit, 25),
             order="write_date desc",
         )
+        partners.sort(
+            key=lambda partner: self._score_partner(
+                partner,
+                query=query,
+                email=email,
+                phone=phone,
+            ),
+            reverse=True,
+        )
+        return partners[:limit]
 
     def find_partner(self, *, email: str | None, phone: str | None) -> dict[str, Any] | None:
         partners = self.search_partners(email=email, phone=phone, limit=1)
         return partners[0] if partners else None
 
     def get_partner(self, partner_id: int) -> dict[str, Any] | None:
-        partners = self.read_records("res.partner", [partner_id], PARTNER_FIELDS)
+        partners = self.read_records("res.partner", [partner_id], self.partner_fields)
         return partners[0] if partners else None
 
     def get_leads(
@@ -196,9 +309,9 @@ class OdooClient:
 
         phone_digits = _digits(phone)
         if phone_digits:
-            phone_token = phone_digits[-9:] if len(phone_digits) >= 9 else phone_digits
-            clauses.append(["phone", "ilike", phone_token])
-            clauses.append(["mobile", "ilike", phone_token])
+            for phone_token in _phone_tokens(phone)[:3]:
+                clauses.append(["phone", "ilike", phone_token])
+                clauses.append(["mobile", "ilike", phone_token])
 
         if not clauses:
             return []
@@ -359,6 +472,8 @@ class OdooClient:
         phone: str | None,
         query: str | None = None,
         partner_id: int | None = None,
+        include_orders: bool = True,
+        include_invoices: bool = True,
     ) -> dict[str, Any]:
         if partner_id:
             partner = self.get_partner(partner_id)
@@ -375,8 +490,10 @@ class OdooClient:
         lookup_email = email or (partner or {}).get("email")
         lookup_phone = phone or (partner or {}).get("phone") or (partner or {}).get("mobile")
         leads = self.get_leads(partner_id=partner_id, email=lookup_email, phone=lookup_phone)
-        orders = self.get_sale_orders(partner_id=partner_id)
-        invoices, invoices_warning = self.get_invoices(partner_id=partner_id)
+        orders = self.get_sale_orders(partner_id=partner_id) if include_orders else []
+        invoices, invoices_warning = (
+            self.get_invoices(partner_id=partner_id) if include_invoices else ([], None)
+        )
         courses, courses_warning = self.get_courses(partner_id=partner_id)
         warnings = [warning for warning in [invoices_warning, courses_warning] if warning]
 

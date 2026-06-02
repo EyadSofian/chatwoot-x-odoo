@@ -57,7 +57,13 @@ CHATWOOT_ACCOUNT_ID=1
 CHATWOOT_API_ACCESS_TOKEN=...
 CHATWOOT_WEBHOOK_SECRET=...
 CHATWOOT_AUTO_PRIVATE_NOTES=false
+CHATWOOT_UPDATE_SENSITIVE_ATTRIBUTES=false
 DASHBOARD_APP_TOKEN=choose-a-long-random-token
+
+RESTRICTED_DASHBOARD_SECTIONS=orders,invoices
+SENSITIVE_DATA_ALLOWED_AGENT_EMAILS=manager@example.com,finance@example.com
+SENSITIVE_DATA_ALLOWED_AGENT_IDS=
+SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS=
 
 ODOO_URL=https://engosoft.com
 ODOO_DB=...
@@ -122,8 +128,30 @@ The dashboard app will:
 - Auto-search Odoo using the contact email or phone.
 - Let agents manually search by name, email, or phone.
 - Show contact, CRM, sales order, invoice, and course tabs.
+- Hide restricted tabs such as orders and invoices unless the current Chatwoot
+  agent is on the allow-list.
 - Support Auto, Light, and Dark themes.
 - Add a private note to the conversation when the agent clicks `Add private note`.
+
+## Sensitive Data Access
+
+By default, the dashboard hides `orders` and `invoices` for every agent:
+
+```env
+RESTRICTED_DASHBOARD_SECTIONS=orders,invoices
+```
+
+Grant access by adding Chatwoot agent emails, IDs, or whole domains:
+
+```env
+SENSITIVE_DATA_ALLOWED_AGENT_EMAILS=manager@example.com,finance@example.com
+SENSITIVE_DATA_ALLOWED_AGENT_IDS=12,42
+SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS=engosoft.com
+```
+
+The dashboard receives the current agent from Chatwoot's `currentAgent` payload.
+This is enough for normal internal use, but keep `DASHBOARD_APP_TOKEN` private
+because anyone with the token can open the embedded app URL.
 
 ## Odoo access
 
