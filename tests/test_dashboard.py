@@ -50,6 +50,7 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
         "courses": [],
         "warnings": [],
         "restricted_sections": ["invoices", "orders"],
+        "agent": {"email": "", "id": "", "name": ""},
     }
 
 

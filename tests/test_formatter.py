@@ -17,6 +17,7 @@ def test_formats_snapshot_and_attributes():
             "mobile": False,
             "company_name": "Acme",
             "commercial_partner_id": [5, "Acme"],
+            "user_id": [22, "Mona Sales"],
         },
         "leads": [{"id": 9, "name": "Website lead", "stage_id": [1, "New"]}],
         "orders": [
@@ -27,6 +28,7 @@ def test_formats_snapshot_and_attributes():
                 "amount_total": 1200,
                 "currency_id": [74, "EGP"],
                 "invoice_status": "to invoice",
+                "user_id": [22, "Mona Sales"],
                 "lines": [{"product_id": [4, "Service"], "product_uom_qty": 2, "price_subtotal": 1200}],
             }
         ],
@@ -39,6 +41,7 @@ def test_formats_snapshot_and_attributes():
                 "amount_total": 900,
                 "amount_residual": 300,
                 "currency_id": [74, "EGP"],
+                "invoice_user_id": [22, "Mona Sales"],
                 "lines": [{"product_id": [8, "Course"], "quantity": 1, "price_subtotal": 900}],
             }
         ],
@@ -61,8 +64,12 @@ def test_formats_snapshot_and_attributes():
     assert "S0003" in note
     assert "INV/2026/0001" in note
     assert "Sales Masterclass" in note
+    assert "Mona Sales" in note
     assert attrs["odoo_match_found"] is True
     assert attrs["odoo_partner_id"] == "5"
+    assert attrs["odoo_partner_salesperson"] == "Mona Sales"
+    assert attrs["odoo_last_order_salesperson"] == "Mona Sales"
+    assert attrs["odoo_last_invoice_salesperson"] == "Mona Sales"
     assert attrs["odoo_invoices_count"] == 1
     assert attrs["odoo_courses_count"] == 1
 

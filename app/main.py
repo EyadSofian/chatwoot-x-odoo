@@ -142,6 +142,11 @@ async def dashboard_search(
             "courses": [],
             "warnings": [],
             "restricted_sections": restricted_sections_for(agent, current_settings),
+            "agent": {
+                "email": agent.normalized_email,
+                "id": agent.normalized_id,
+                "name": agent.name or "",
+            },
         }
 
     missing = [

@@ -132,10 +132,44 @@ The dashboard app will:
 - Auto-search Odoo using the contact email or phone.
 - Let agents manually search by name, email, or phone.
 - Show contact, CRM, sales order, invoice, and course tabs.
+- Show the contact salesperson, sales order salesperson, and invoice salesperson.
 - Hide restricted tabs such as orders and invoices unless the current Chatwoot
   agent is on the allow-list.
 - Support Auto, Light, and Dark themes.
 - Add a private note to the conversation when the agent clicks `Add private note`.
+
+## Chatwoot Custom Attributes
+
+The dashboard works without custom attributes. Add these conversation custom
+attributes in Chatwoot only if you want to filter conversations or show Odoo
+status in Chatwoot lists:
+
+```text
+odoo_match_found
+odoo_partner_id
+odoo_partner_name
+odoo_partner_salesperson
+odoo_leads_count
+odoo_courses_count
+odoo_last_course
+odoo_last_course_completion
+```
+
+Sensitive commercial attributes are only updated when
+`CHATWOOT_UPDATE_SENSITIVE_ATTRIBUTES=true`:
+
+```text
+odoo_orders_count
+odoo_last_order
+odoo_last_order_state
+odoo_last_order_total
+odoo_last_order_salesperson
+odoo_invoices_count
+odoo_last_invoice
+odoo_last_invoice_payment_state
+odoo_last_invoice_due
+odoo_last_invoice_salesperson
+```
 
 ## Sensitive Data Access
 

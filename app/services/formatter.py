@@ -53,6 +53,7 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
             f"Odoo partner ID: {partner.get('id')}",
             f"Email: {partner.get('email') or '-'}",
             f"Phone: {partner.get('phone') or partner.get('mobile') or '-'}",
+            f"Salesperson: {_name(partner.get('user_id'))}",
             f"Company: {partner.get('company_name') or _name(partner.get('commercial_partner_id'))}",
         ]
     )
@@ -75,7 +76,11 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
             state = order.get("state") or "-"
             total = _money(order.get("amount_total"), order.get("currency_id"))
             invoice_status = order.get("invoice_status") or "-"
-            lines.append(f"- {order.get('name')} | {state} | {total} | invoice: {invoice_status}")
+            salesperson = _name(order.get("user_id"))
+            lines.append(
+                f"- {order.get('name')} | {state} | {total} | "
+                f"invoice: {invoice_status} | salesperson: {salesperson}"
+            )
             for order_line in order.get("lines", [])[:3]:
                 product = _name(order_line.get("product_id"))
                 qty = order_line.get("product_uom_qty") or 0
@@ -91,9 +96,11 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
         for invoice in invoices[:5]:
             total = _money(invoice.get("amount_total"), invoice.get("currency_id"))
             due = _money(invoice.get("amount_residual"), invoice.get("currency_id"))
+            salesperson = _name(invoice.get("invoice_user_id"))
             lines.append(
                 f"- {invoice.get('name')} | {invoice.get('state') or '-'} | "
-                f"{invoice.get('payment_state') or '-'} | total: {total} | due: {due}"
+                f"{invoice.get('payment_state') or '-'} | total: {total} | "
+                f"due: {due} | salesperson: {salesperson}"
             )
             for invoice_line in invoice.get("lines", [])[:3]:
                 product = _name(invoice_line.get("product_id")) or invoice_line.get("name") or "-"
@@ -114,6 +121,12 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
                 details = [f"source: {source}", f"status: {status}"]
                 if order_name != "-":
                     details.append(f"order: {order_name}")
+                invoice_name = course.get("invoice_name") or _name(course.get("invoice_id"))
+                if invoice_name != "-":
+                    details.append(f"invoice: {invoice_name}")
+                salesperson = _name(course.get("salesperson"))
+                if salesperson != "-":
+                    details.append(f"salesperson: {salesperson}")
                 if quantity not in (False, None, ""):
                     details.append(f"qty: {quantity}")
                 lines.append(f"- {_name(course.get('channel_id'))} | {' | '.join(details)}")
@@ -157,16 +170,21 @@ def conversation_attributes(
     if partner:
         attrs["odoo_partner_id"] = str(partner.get("id"))
         attrs["odoo_partner_name"] = partner.get("name") or ""
+        partner_salesperson = _name(partner.get("user_id"))
+        if partner_salesperson != "-":
+            attrs["odoo_partner_salesperson"] = partner_salesperson
 
     if orders:
         attrs["odoo_last_order"] = orders[0].get("name") or ""
         attrs["odoo_last_order_state"] = orders[0].get("state") or ""
         attrs["odoo_last_order_total"] = str(orders[0].get("amount_total") or 0)
+        attrs["odoo_last_order_salesperson"] = _name(orders[0].get("user_id"))
 
     if invoices:
         attrs["odoo_last_invoice"] = invoices[0].get("name") or ""
         attrs["odoo_last_invoice_payment_state"] = invoices[0].get("payment_state") or ""
         attrs["odoo_last_invoice_due"] = str(invoices[0].get("amount_residual") or 0)
+        attrs["odoo_last_invoice_salesperson"] = _name(invoices[0].get("invoice_user_id"))
 
     if courses:
         attrs["odoo_last_course"] = _name(courses[0].get("channel_id"))

@@ -134,7 +134,10 @@
 
   function restrictedNode(sectionName) {
     const node = emptyNode();
-    node.querySelector("p").textContent = `${sectionName} are restricted for the current agent.`;
+    const agentEmail = state.snapshot?.agent?.email || state.lastLookup.agentEmail || "";
+    node.querySelector("p").textContent = agentEmail
+      ? `${sectionName} are locked for ${agentEmail}. Add this email to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS.`
+      : `${sectionName} are locked because Chatwoot did not send the current agent email.`;
     return node;
   }
 
@@ -160,6 +163,7 @@
       detail("Odoo ID", partner.id),
       detail("Email", partner.email),
       detail("Phone", partner.phone || partner.mobile),
+      detail("Salesperson", partner.user_id),
       detail("Company", partner.company_name || partner.commercial_partner_id),
       detail("VAT", partner.vat),
       detail("City", partner.city),
@@ -244,6 +248,7 @@
         `State: ${valueOrDash(order.state)}`,
         `Total: ${money(order.amount_total, order.currency_id)}`,
         `Invoice: ${valueOrDash(order.invoice_status)}`,
+        `Salesperson: ${valueOrDash(order.user_id)}`,
       ].join(" | ");
 
       (order.lines || []).slice(0, 4).forEach((line) => {
@@ -284,6 +289,7 @@
         `Payment: ${valueOrDash(invoice.payment_state)}`,
         `Total: ${money(invoice.amount_total, invoice.currency_id)}`,
         `Due: ${money(invoice.amount_residual, invoice.currency_id)}`,
+        `Salesperson: ${valueOrDash(invoice.invoice_user_id)}`,
       ].join(" | ");
 
       (invoice.lines || []).slice(0, 4).forEach((line) => {
@@ -329,6 +335,12 @@
       }
       if (course.order_name || course.order_id) {
         meta.push(`Order: ${valueOrDash(course.order_name || course.order_id)}`);
+      }
+      if (course.invoice_name || course.invoice_id) {
+        meta.push(`Invoice: ${valueOrDash(course.invoice_name || course.invoice_id)}`);
+      }
+      if (course.salesperson) {
+        meta.push(`Salesperson: ${valueOrDash(course.salesperson)}`);
       }
       if (course.quantity) {
         meta.push(`Qty: ${valueOrDash(course.quantity)}`);
@@ -383,9 +395,13 @@
     renderCourses(courses);
 
     if (partner && restrictedSections.length > 0) {
+      const agentEmail = snapshot.agent?.email || state.lastLookup.agentEmail || "";
+      const agentHint = agentEmail
+        ? ` Add ${agentEmail} to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS.`
+        : " Chatwoot did not send the current agent email.";
       setStatus(
         "warning",
-        `Matched ${valueOrDash(partner.name)}. Sensitive sections are restricted for this agent.`
+        `Matched ${valueOrDash(partner.name)}. Sensitive sections are locked.${agentHint}`
       );
     } else if (partner && warnings.length > 0) {
       setStatus("warning", `Matched ${valueOrDash(partner.name)}. Some optional Odoo data is unavailable.`);

@@ -46,6 +46,7 @@ PARTNER_BASE_FIELDS = [
     "city",
     "country_id",
     "customer_rank",
+    "user_id",
 ]
 OPTIONAL_PARTNER_FIELDS = ["phone_sanitized"]
 
@@ -452,6 +453,7 @@ class OdooClient:
                 "currency_id",
                 "payment_state",
                 "invoice_origin",
+                "invoice_user_id",
             ],
             limit=self.settings.max_invoices,
             order="invoice_date desc, id desc",
@@ -618,7 +620,7 @@ class OdooClient:
         orders, orders_warning = self.optional_search_read(
             "sale.order",
             [["partner_id", "child_of", partner_id]],
-            ["id", "name", "state", "date_order"],
+            ["id", "name", "state", "date_order", "user_id"],
             limit=max(self.settings.max_courses * 4, 20),
             order="date_order desc",
         )
@@ -693,6 +695,7 @@ class OdooClient:
                     "invoiced": line.get("qty_invoiced"),
                     "order_id": order_ref,
                     "order_name": (order or {}).get("name"),
+                    "salesperson": (order or {}).get("user_id"),
                     "event_id": line.get("event_id"),
                     "event_ticket_id": line.get("event_ticket_id"),
                 }
@@ -711,7 +714,7 @@ class OdooClient:
                 ["partner_id", "child_of", partner_id],
                 ["move_type", "in", ["out_invoice", "out_refund"]],
             ],
-            ["id", "name", "state", "payment_state", "invoice_date"],
+            ["id", "name", "state", "payment_state", "invoice_date", "invoice_user_id"],
             limit=max(self.settings.max_courses * 4, 20),
             order="invoice_date desc, id desc",
         )
@@ -777,6 +780,7 @@ class OdooClient:
                     "quantity": line.get("quantity"),
                     "invoice_id": move_ref,
                     "invoice_name": (move or {}).get("name"),
+                    "salesperson": (move or {}).get("invoice_user_id"),
                 }
             )
             if len(courses) >= self.settings.max_courses:
