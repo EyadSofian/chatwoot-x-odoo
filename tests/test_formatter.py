@@ -67,6 +67,40 @@ def test_formats_snapshot_and_attributes():
     assert attrs["odoo_courses_count"] == 1
 
 
+def test_formats_sales_order_line_course_without_fake_progress():
+    snapshot = {
+        "partner": {
+            "id": 5,
+            "name": "Alice",
+            "email": "alice@example.com",
+            "phone": False,
+            "mobile": False,
+            "company_name": False,
+            "commercial_partner_id": [5, "Alice"],
+        },
+        "leads": [],
+        "orders": [],
+        "invoices": [],
+        "courses": [
+            {
+                "id": "sale_order_line:1",
+                "source_label": "Sales course line",
+                "channel_id": [109, "Management - PMP - Event"],
+                "member_status": "sale",
+                "completion": None,
+                "order_name": "S14794",
+                "quantity": 1,
+            }
+        ],
+    }
+
+    note = format_customer_note(snapshot, lookup_email="alice@example.com", lookup_phone=None)
+
+    assert "Management - PMP - Event" in note
+    assert "order: S14794" in note
+    assert "0% complete" not in note
+
+
 def test_formats_restricted_sections_without_implying_zero_records():
     snapshot = {
         "partner": {

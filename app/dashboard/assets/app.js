@@ -309,24 +309,48 @@
     courses.forEach((course) => {
       const item = document.createElement("article");
       item.className = "record-item";
-      const completion = Number(course.completion || 0);
+      const hasProgress =
+        course.completion !== false && course.completion !== null && course.completion !== undefined;
+      const completion = hasProgress ? Number(course.completion || 0) : null;
 
       item.innerHTML = `
         <p class="record-title"></p>
         <p class="record-meta"></p>
-        <div class="progress-track"><span class="progress-bar"></span></div>
       `;
       item.querySelector(".record-title").textContent = valueOrDash(course.channel_id);
-      item.querySelector(".record-meta").textContent = [
+      const meta = [
+        `Source: ${valueOrDash(course.source_label || course.source)}`,
         `Status: ${valueOrDash(course.member_status)}`,
-        `Progress: ${completion.toFixed(0)}%`,
-        `Completed slides: ${valueOrDash(course.completed_slides_count)}`,
-        `Next: ${valueOrDash(course.next_slide_id)}`,
-      ].join(" | ");
-      item.querySelector(".progress-bar").style.width = `${Math.max(
-        0,
-        Math.min(100, completion)
-      )}%`;
+      ];
+      if (hasProgress) {
+        meta.push(`Progress: ${completion.toFixed(0)}%`);
+        meta.push(`Completed slides: ${valueOrDash(course.completed_slides_count)}`);
+        meta.push(`Next: ${valueOrDash(course.next_slide_id)}`);
+      }
+      if (course.order_name || course.order_id) {
+        meta.push(`Order: ${valueOrDash(course.order_name || course.order_id)}`);
+      }
+      if (course.quantity) {
+        meta.push(`Qty: ${valueOrDash(course.quantity)}`);
+      }
+      item.querySelector(".record-meta").textContent = meta.join(" | ");
+
+      if (course.description && course.description !== valueOrDash(course.channel_id)) {
+        const description = document.createElement("p");
+        description.className = "line-item";
+        description.textContent = valueOrDash(course.description);
+        item.appendChild(description);
+      }
+
+      if (hasProgress) {
+        const progressTrack = document.createElement("div");
+        const progressBar = document.createElement("span");
+        progressTrack.className = "progress-track";
+        progressBar.className = "progress-bar";
+        progressBar.style.width = `${Math.max(0, Math.min(100, completion))}%`;
+        progressTrack.appendChild(progressBar);
+        item.appendChild(progressTrack);
+      }
 
       els.coursesList.appendChild(item);
     });

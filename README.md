@@ -15,6 +15,8 @@ The first production path is read-only toward Odoo:
 - Show recent customer invoices from `account.move` and invoice lines.
 - Show eLearning course memberships from `slide.channel.partner`, including
   progress percentage and next lesson.
+- Show course/event registrations from `event.registration` and course-like sales
+  order lines when courses are sold as event products.
 - Optionally update Chatwoot conversation custom attributes for filtering.
 - Optionally add the current Odoo snapshot to the conversation as a private note.
 

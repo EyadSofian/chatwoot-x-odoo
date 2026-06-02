@@ -9,6 +9,17 @@ from typing import Any
 from app.config import Settings
 
 logger = logging.getLogger(__name__)
+COURSE_KEYWORDS = (
+    "course",
+    "event",
+    "training",
+    "workshop",
+    "online",
+    "كورس",
+    "دورة",
+    "برنامج",
+    "تدريب",
+)
 
 
 def _digits(value: str | None) -> str:
@@ -86,9 +97,15 @@ def _phone_match_score(lookup_values: list[str], partner_values: list[str]) -> i
     return 0
 
 
+def _looks_like_course_line(value: str | None) -> bool:
+    text = str(value or "").lower()
+    return any(keyword in text for keyword in COURSE_KEYWORDS)
+
+
 class OdooClient:
     def __init__(self, settings: Settings):
         self.settings = settings
+        self._model_fields_cache: dict[str, dict[str, Any]] = {}
 
     @cached_property
     def uid(self) -> int:
@@ -143,20 +160,31 @@ class OdooClient:
 
     @cached_property
     def partner_fields(self) -> list[str]:
-        try:
-            available = self.execute_kw(
-                "res.partner",
-                "fields_get",
-                [],
-                {"attributes": ["string"]},
-            )
-        except xmlrpc.client.Fault:
-            logger.exception("Could not inspect res.partner fields")
+        available = self.model_fields("res.partner")
+        if not available:
             return PARTNER_BASE_FIELDS
 
         fields = list(PARTNER_BASE_FIELDS)
         fields.extend(field for field in OPTIONAL_PARTNER_FIELDS if field in available)
         return fields
+
+    def model_fields(self, model: str) -> dict[str, Any]:
+        if model in self._model_fields_cache:
+            return self._model_fields_cache[model]
+
+        try:
+            available = self.execute_kw(
+                model,
+                "fields_get",
+                [],
+                {"attributes": ["string"]},
+            )
+        except xmlrpc.client.Fault:
+            logger.warning("Could not inspect Odoo model fields for %s", model, exc_info=True)
+            available = {}
+
+        self._model_fields_cache[model] = available
+        return available
 
     def optional_search_read(
         self,
@@ -448,7 +476,10 @@ class OdooClient:
         if not partner_id:
             return [], None
 
-        courses, warning = self.optional_search_read(
+        courses: list[dict[str, Any]] = []
+        warnings: list[str] = []
+
+        elearning_courses, warning = self.optional_search_read(
             "slide.channel.partner",
             [["partner_id", "=", partner_id]],
             [
@@ -463,7 +494,181 @@ class OdooClient:
             limit=self.settings.max_courses,
             order="write_date desc",
         )
-        return courses, warning
+        if warning:
+            warnings.append(warning)
+        for course in elearning_courses:
+            course["source"] = "elearning"
+            course["source_label"] = "eLearning"
+            courses.append(course)
+
+        event_courses, event_warning = self.get_event_registration_courses(
+            partner_id=partner_id
+        )
+        if event_warning:
+            warnings.append(event_warning)
+        courses.extend(event_courses)
+
+        sale_line_courses, sale_line_warning = self.get_sale_line_courses(
+            partner_id=partner_id
+        )
+        if sale_line_warning:
+            warnings.append(sale_line_warning)
+        courses.extend(sale_line_courses)
+
+        return courses[: self.settings.max_courses], "; ".join(warnings) or None
+
+    def get_event_registration_courses(
+        self, *, partner_id: int | None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        fields = self.model_fields("event.registration")
+        if not fields:
+            return [], None
+
+        if "partner_id" not in fields:
+            return [], "event.registration: partner_id field is unavailable"
+
+        desired_fields = [
+            field
+            for field in [
+                "id",
+                "event_id",
+                "event_ticket_id",
+                "partner_id",
+                "name",
+                "email",
+                "phone",
+                "state",
+                "sale_order_id",
+                "sale_order_line_id",
+                "create_date",
+            ]
+            if field in fields
+        ]
+        registrations, warning = self.optional_search_read(
+            "event.registration",
+            [["partner_id", "child_of", partner_id]],
+            desired_fields,
+            limit=self.settings.max_courses,
+            order="create_date desc",
+        )
+        if warning:
+            return [], warning
+
+        courses: list[dict[str, Any]] = []
+        for registration in registrations:
+            course_name = (
+                registration.get("event_id")
+                or registration.get("event_ticket_id")
+                or registration.get("name")
+                or f"Event registration #{registration.get('id')}"
+            )
+            courses.append(
+                {
+                    "id": f"event_registration:{registration.get('id')}",
+                    "source": "event_registration",
+                    "source_label": "Event attendee",
+                    "channel_id": course_name,
+                    "member_status": registration.get("state") or "-",
+                    "completion": None,
+                    "completed_slides_count": None,
+                    "next_slide_id": False,
+                    "attendee_name": registration.get("name"),
+                    "event_ticket_id": registration.get("event_ticket_id"),
+                    "sale_order_id": registration.get("sale_order_id"),
+                    "sale_order_line_id": registration.get("sale_order_line_id"),
+                }
+            )
+        return courses, None
+
+    def get_sale_line_courses(
+        self, *, partner_id: int | None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        orders, orders_warning = self.optional_search_read(
+            "sale.order",
+            [["partner_id", "child_of", partner_id]],
+            ["id", "name", "state", "date_order"],
+            limit=max(self.settings.max_courses * 4, 20),
+            order="date_order desc",
+        )
+        if orders_warning:
+            return [], orders_warning
+        if not orders:
+            return [], None
+
+        order_ids = [order["id"] for order in orders]
+        orders_by_id = {int(order["id"]): order for order in orders}
+        fields = self.model_fields("sale.order.line")
+        desired_fields = [
+            field
+            for field in [
+                "id",
+                "order_id",
+                "product_id",
+                "name",
+                "product_uom_qty",
+                "qty_delivered",
+                "qty_invoiced",
+                "event_id",
+                "event_ticket_id",
+                "display_type",
+            ]
+            if field in fields
+        ]
+        domain: list[Any] = [["order_id", "in", order_ids]]
+        if "display_type" in fields:
+            domain.append(["display_type", "=", False])
+
+        lines, lines_warning = self.optional_search_read(
+            "sale.order.line",
+            domain,
+            desired_fields,
+            limit=max(self.settings.max_courses * 10, 50),
+            order="id desc",
+        )
+        if lines_warning:
+            return [], lines_warning
+
+        courses: list[dict[str, Any]] = []
+        for line in lines:
+            text = " ".join(
+                [
+                    str(line.get("name") or ""),
+                    str(line.get("product_id") or ""),
+                    str(line.get("event_id") or ""),
+                    str(line.get("event_ticket_id") or ""),
+                ]
+            )
+            has_event_field = bool(line.get("event_id") or line.get("event_ticket_id"))
+            if not has_event_field and not _looks_like_course_line(text):
+                continue
+
+            order_ref = line.get("order_id")
+            order_id = int(order_ref[0]) if isinstance(order_ref, list | tuple) and order_ref else None
+            order = orders_by_id.get(order_id) if order_id else None
+            courses.append(
+                {
+                    "id": f"sale_order_line:{line.get('id')}",
+                    "source": "sale_order_line",
+                    "source_label": "Sales course line",
+                    "channel_id": line.get("product_id") or line.get("name"),
+                    "member_status": (order or {}).get("state") or "-",
+                    "completion": None,
+                    "completed_slides_count": None,
+                    "next_slide_id": False,
+                    "description": line.get("name"),
+                    "quantity": line.get("product_uom_qty"),
+                    "delivered": line.get("qty_delivered"),
+                    "invoiced": line.get("qty_invoiced"),
+                    "order_id": order_ref,
+                    "order_name": (order or {}).get("name"),
+                    "event_id": line.get("event_id"),
+                    "event_ticket_id": line.get("event_ticket_id"),
+                }
+            )
+            if len(courses) >= self.settings.max_courses:
+                break
+
+        return courses, None
 
     def customer_snapshot(
         self,

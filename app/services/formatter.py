@@ -105,13 +105,24 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     lines.append(f"Courses: {len(courses)}")
     if courses:
         for course in courses[:5]:
-            completion = course.get("completion") or 0
+            completion = course.get("completion")
             status = course.get("member_status") or "-"
-            next_lesson = _name(course.get("next_slide_id"))
-            lines.append(
-                f"- {_name(course.get('channel_id'))} | {status} | "
-                f"{completion}% complete | next: {next_lesson}"
-            )
+            source = course.get("source_label") or course.get("source") or "-"
+            if completion in (False, None, ""):
+                order_name = course.get("order_name") or _name(course.get("order_id"))
+                quantity = course.get("quantity")
+                details = [f"source: {source}", f"status: {status}"]
+                if order_name != "-":
+                    details.append(f"order: {order_name}")
+                if quantity not in (False, None, ""):
+                    details.append(f"qty: {quantity}")
+                lines.append(f"- {_name(course.get('channel_id'))} | {' | '.join(details)}")
+            else:
+                next_lesson = _name(course.get("next_slide_id"))
+                lines.append(
+                    f"- {_name(course.get('channel_id'))} | source: {source} | "
+                    f"{status} | {completion}% complete | next: {next_lesson}"
+                )
 
     if warnings:
         lines.append("")
