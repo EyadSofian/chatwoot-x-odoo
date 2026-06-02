@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import HTTPException, Request
@@ -10,6 +11,30 @@ from app.services.chatwoot import ChatwootClient
 from app.services.formatter import format_customer_note
 from app.services.odoo import OdooClient
 from app.services.permissions import AgentContext, restricted_sections_for
+
+logger = logging.getLogger(__name__)
+
+
+def _log_restriction(agent: AgentContext, restricted_sections: list[str]) -> None:
+    """Explain in the backend logs why sensitive sections are hidden."""
+    if not restricted_sections:
+        return
+    if not agent.normalized_email:
+        logger.warning(
+            "Dashboard sections %s locked: Chatwoot did not send the current agent email "
+            "(agent_id=%r, agent_name=%r). The Dashboard App context must include "
+            "currentAgent.email, then add that email to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS.",
+            restricted_sections,
+            agent.normalized_id or None,
+            agent.name or None,
+        )
+    else:
+        logger.info(
+            "Dashboard sections %s locked for agent %s: not in "
+            "SENSITIVE_DATA_ALLOWED_AGENT_EMAILS/_IDS/_DOMAINS.",
+            restricted_sections,
+            agent.normalized_email,
+        )
 
 
 def verify_dashboard_access(
@@ -42,6 +67,7 @@ async def fetch_dashboard_snapshot(
 ) -> dict[str, Any]:
     agent = AgentContext(email=agent_email, agent_id=agent_id, name=agent_name)
     restricted_sections = restricted_sections_for(agent, settings)
+    _log_restriction(agent, restricted_sections)
     snapshot = await run_in_threadpool(
         OdooClient(settings).customer_snapshot,
         email=email,
@@ -57,6 +83,9 @@ async def fetch_dashboard_snapshot(
         "id": agent.normalized_id,
         "name": agent.name or "",
     }
+    debug = snapshot.setdefault("debug", {})
+    debug["agent_email_present"] = bool(agent.normalized_email)
+    debug["restricted_sections"] = restricted_sections
     return snapshot
 
 

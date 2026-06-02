@@ -16,6 +16,9 @@
     statusPanel: document.getElementById("statusPanel"),
     statusText: document.getElementById("statusText"),
     noteButton: document.getElementById("noteButton"),
+    diagnosticsPanel: document.getElementById("diagnosticsPanel"),
+    diagnosticsCount: document.getElementById("diagnosticsCount"),
+    diagnosticsList: document.getElementById("diagnosticsList"),
     metricContact: document.getElementById("metricContact"),
     metricLeads: document.getElementById("metricLeads"),
     metricOrders: document.getElementById("metricOrders"),
@@ -368,6 +371,81 @@
     });
   }
 
+  function diagnosticEntry(title, meta, kind) {
+    const item = document.createElement("article");
+    item.className = `record-item${kind ? ` is-${kind}` : ""}`;
+    item.innerHTML = `
+      <p class="record-title"></p>
+      <p class="record-meta"></p>
+    `;
+    item.querySelector(".record-title").textContent = title;
+    const metaNode = item.querySelector(".record-meta");
+    if (meta) {
+      metaNode.textContent = meta;
+    } else {
+      metaNode.remove();
+    }
+    return item;
+  }
+
+  function renderDiagnostics(snapshot, restrictedSections) {
+    clearNode(els.diagnosticsList);
+    const entries = [];
+    const partner = snapshot.partner || null;
+    const warnings = snapshot.warnings || [];
+    const debug = snapshot.debug || {};
+    const agentEmail = snapshot.agent?.email || state.lastLookup.agentEmail || "";
+
+    if (restrictedSections.length > 0) {
+      if (agentEmail) {
+        entries.push(
+          diagnosticEntry(
+            `Sensitive sections locked for ${agentEmail}`,
+            `Add ${agentEmail} to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS (sections: ${restrictedSections.join(
+              ", "
+            )}).`,
+            "warning"
+          )
+        );
+      } else {
+        entries.push(
+          diagnosticEntry(
+            "Chatwoot did not send the current agent email",
+            `Sensitive sections (${restrictedSections.join(
+              ", "
+            )}) stay locked until Chatwoot provides currentAgent.email. Open the app from inside a conversation as a signed-in agent.`,
+            "warning"
+          )
+        );
+      }
+    }
+
+    if (partner && debug.scope_partner_ids) {
+      const scope = Array.isArray(debug.scope_partner_ids)
+        ? debug.scope_partner_ids.join(", ")
+        : "";
+      const commercial =
+        debug.commercial_partner_id && debug.commercial_partner_id !== debug.partner_id
+          ? ` (commercial partner ${debug.commercial_partner_id} included)`
+          : "";
+      entries.push(
+        diagnosticEntry(
+          `Matched Odoo partner ${debug.partner_id ?? valueOrDash(partner.id)}`,
+          `Searched orders/invoices against partner ids: ${scope}${commercial}.`,
+          "muted"
+        )
+      );
+    }
+
+    warnings.forEach((warning) => {
+      entries.push(diagnosticEntry("Optional Odoo data unavailable", String(warning), "warning"));
+    });
+
+    els.diagnosticsCount.textContent = String(entries.length);
+    els.diagnosticsPanel.classList.toggle("is-hidden", entries.length === 0);
+    entries.forEach((entry) => els.diagnosticsList.appendChild(entry));
+  }
+
   function renderSnapshot(snapshot) {
     state.snapshot = snapshot;
     const partner = snapshot.partner || null;
@@ -393,6 +471,7 @@
     renderOrders(orders, restrictedSections.includes("orders"));
     renderInvoices(invoices, restrictedSections.includes("invoices"));
     renderCourses(courses);
+    renderDiagnostics(snapshot, restrictedSections);
 
     if (partner && restrictedSections.length > 0) {
       const agentEmail = snapshot.agent?.email || state.lastLookup.agentEmail || "";

@@ -133,6 +133,7 @@ async def dashboard_search(
 
     if not any([q, email, phone, partner_id]):
         agent = AgentContext(email=agent_email, agent_id=agent_id, name=agent_name)
+        restricted_sections = restricted_sections_for(agent, current_settings)
         return {
             "partner": None,
             "matches": [],
@@ -141,11 +142,15 @@ async def dashboard_search(
             "invoices": [],
             "courses": [],
             "warnings": [],
-            "restricted_sections": restricted_sections_for(agent, current_settings),
+            "restricted_sections": restricted_sections,
             "agent": {
                 "email": agent.normalized_email,
                 "id": agent.normalized_id,
                 "name": agent.name or "",
+            },
+            "debug": {
+                "agent_email_present": bool(agent.normalized_email),
+                "restricted_sections": restricted_sections,
             },
         }
 

@@ -135,6 +135,8 @@ The dashboard app will:
 - Show the contact salesperson, sales order salesperson, and invoice salesperson.
 - Hide restricted tabs such as orders and invoices unless the current Chatwoot
   agent is on the allow-list.
+- Show a Diagnostics panel with the detected agent email, the partner search
+  scope, and any optional-model warnings when something is locked or missing.
 - Support Auto, Light, and Dark themes.
 - Add a private note to the conversation when the agent clicks `Add private note`.
 
@@ -190,6 +192,76 @@ SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS=engosoft.com
 The dashboard receives the current agent from Chatwoot's `currentAgent` payload.
 This is enough for normal internal use, but keep `DASHBOARD_APP_TOKEN` private
 because anyone with the token can open the embedded app URL.
+
+## How Odoo records are matched
+
+The bridge first resolves the Chatwoot contact to a single `res.partner`
+(by email, then by normalized phone, then by manual search). From that partner it
+builds a **search scope**:
+
+```text
+scope = [matched_partner_id, commercial_partner_id]
+```
+
+Sales orders, invoices, event registrations, and course lines are then queried
+with `["partner_id", "child_of", scope]`. `child_of` matches the partner *and its
+descendants*, so including the `commercial_partner_id` (the top of the Odoo
+company/contact tree) means we also catch records booked on the parent company or
+on sibling contacts — the common case where an order such as `S14794` is booked on
+the commercial partner while Chatwoot only knows a child contact's email/phone.
+
+`/api/dashboard/search` returns a `debug` block so you can see exactly what was
+searched:
+
+```json
+{
+  "debug": {
+    "partner_id": 10,
+    "commercial_partner_id": 7,
+    "scope_partner_ids": [10, 7],
+    "orders_included": true,
+    "invoices_included": true,
+    "agent_email_present": true
+  }
+}
+```
+
+The dashboard surfaces the same information in a **Diagnostics** panel, including
+any optional-model warnings (for example when the Odoo user cannot read
+`account.move`).
+
+## Troubleshooting: Sales Orders / Invoices are empty
+
+Work through these in order. The Diagnostics panel and the backend logs tell you
+which case you are in.
+
+1. **Sections are locked (most common).** If the panel says *"Sensitive sections
+   locked"* or *"Chatwoot did not send the current agent email"*, the records were
+   never fetched. Orders and invoices are only fetched for allow-listed agents:
+
+   ```env
+   RESTRICTED_DASHBOARD_SECTIONS=orders,invoices
+   SENSITIVE_DATA_ALLOWED_AGENT_EMAILS=eyad.sofiane@engosoft.com,mohamed.assem@engosoft.com
+   ```
+
+   - If the panel shows a detected agent email, add that exact email to
+     `SENSITIVE_DATA_ALLOWED_AGENT_EMAILS` on Railway and redeploy.
+   - If the panel shows *no* agent email, Chatwoot did not include
+     `currentAgent.email` in the Dashboard App context. Open the app from inside a
+     conversation while signed in as an agent. As a fallback you may allow a whole
+     domain with `SENSITIVE_DATA_ALLOWED_AGENT_DOMAINS=engosoft.com`, but the email
+     still has to be delivered for the allow-list to match.
+
+2. **The agent is allowed but records are still empty.** Check the `debug`
+   `scope_partner_ids`. If `commercial_partner_id` is missing, the matched contact
+   may be the wrong record — search manually by name to pick the correct partner.
+   The bridge already searches `partner_id`, `commercial_partner_id`, and
+   `child_of`, so a truly linked order/invoice will appear.
+
+3. **A warning is shown.** Optional models (`account.move`, `slide.channel.partner`,
+   `event.registration`) never fail silently — if the Odoo API user lacks read
+   access the Diagnostics panel and the `warnings` array say which model and why.
+   Grant that model read access to the Odoo API user.
 
 ## Odoo access
 

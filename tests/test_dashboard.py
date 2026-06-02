@@ -51,7 +51,26 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
         "warnings": [],
         "restricted_sections": ["invoices", "orders"],
         "agent": {"email": "", "id": "", "name": ""},
+        "debug": {
+            "agent_email_present": False,
+            "restricted_sections": ["invoices", "orders"],
+        },
     }
+
+
+def test_dashboard_search_locks_sections_when_current_agent_missing(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
+    monkeypatch.setenv("SENSITIVE_DATA_ALLOWED_AGENT_EMAILS", "manager@example.com")
+    get_settings.cache_clear()
+
+    # No agent_email at all: Chatwoot did not deliver currentAgent.email.
+    response = TestClient(app).get("/api/dashboard/search")
+    body = response.json()
+
+    assert response.status_code == 200
+    assert body["restricted_sections"] == ["invoices", "orders"]
+    assert body["agent"]["email"] == ""
+    assert body["debug"]["agent_email_present"] is False
 
 
 def test_dashboard_search_allows_sensitive_sections_for_allowed_agent(monkeypatch):
@@ -65,3 +84,25 @@ def test_dashboard_search_allows_sensitive_sections_for_allowed_agent(monkeypatc
 
     assert response.status_code == 200
     assert response.json()["restricted_sections"] == []
+
+
+def test_dashboard_search_allows_sensitive_sections_for_configured_engosoft_agents(
+    monkeypatch,
+):
+    monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
+    monkeypatch.setenv(
+        "SENSITIVE_DATA_ALLOWED_AGENT_EMAILS",
+        "eyad.sofiane@engosoft.com,mohamed.assem@engosoft.com",
+    )
+    get_settings.cache_clear()
+
+    allowed = TestClient(app).get(
+        "/api/dashboard/search?agent_email=Eyad.Sofiane@engosoft.com"
+    )
+    blocked = TestClient(app).get(
+        "/api/dashboard/search?agent_email=someone.else@engosoft.com"
+    )
+
+    # Allow-list match is case-insensitive.
+    assert allowed.json()["restricted_sections"] == []
+    assert blocked.json()["restricted_sections"] == ["invoices", "orders"]

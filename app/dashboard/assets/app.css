@@ -328,6 +328,14 @@ input:focus {
   font-size: 12px;
 }
 
+.record-item.is-warning {
+  border-left: 3px solid var(--warning);
+}
+
+.record-item.is-muted {
+  border-left: 3px solid var(--border);
+}
+
 .progress-track {
   height: 8px;
   margin-top: 10px;
