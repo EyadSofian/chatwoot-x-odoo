@@ -17,6 +17,8 @@ The first production path is read-only toward Odoo:
   progress percentage and next lesson.
 - Show course/event registrations from `event.registration` and course-like sales
   order lines when courses are sold as event products.
+- Show course-like invoice lines when the course is only visible through customer
+  invoices.
 - Optionally update Chatwoot conversation custom attributes for filtering.
 - Optionally add the current Odoo snapshot to the conversation as a private note.
 

@@ -102,6 +102,22 @@ def _looks_like_course_line(value: str | None) -> bool:
     return any(keyword in text for keyword in COURSE_KEYWORDS)
 
 
+def _record_name(value: Any) -> str:
+    if isinstance(value, list | tuple) and len(value) >= 2:
+        return str(value[1])
+    if value in (False, None, ""):
+        return ""
+    return str(value)
+
+
+def _course_identity(course: dict[str, Any]) -> str:
+    name = _record_name(course.get("channel_id")) or str(course.get("description") or "")
+    source = str(course.get("source") or "")
+    if source in {"sale_order_line", "invoice_line"}:
+        source = "commercial_line"
+    return f"{source}:{name.strip().lower()}"
+
+
 class OdooClient:
     def __init__(self, settings: Settings):
         self.settings = settings
@@ -515,7 +531,23 @@ class OdooClient:
             warnings.append(sale_line_warning)
         courses.extend(sale_line_courses)
 
-        return courses[: self.settings.max_courses], "; ".join(warnings) or None
+        invoice_line_courses, invoice_line_warning = self.get_invoice_line_courses(
+            partner_id=partner_id
+        )
+        if invoice_line_warning:
+            warnings.append(invoice_line_warning)
+        courses.extend(invoice_line_courses)
+
+        deduped_courses: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for course in courses:
+            identity = _course_identity(course)
+            if identity in seen:
+                continue
+            seen.add(identity)
+            deduped_courses.append(course)
+
+        return deduped_courses[: self.settings.max_courses], "; ".join(warnings) or None
 
     def get_event_registration_courses(
         self, *, partner_id: int | None
@@ -663,6 +695,88 @@ class OdooClient:
                     "order_name": (order or {}).get("name"),
                     "event_id": line.get("event_id"),
                     "event_ticket_id": line.get("event_ticket_id"),
+                }
+            )
+            if len(courses) >= self.settings.max_courses:
+                break
+
+        return courses, None
+
+    def get_invoice_line_courses(
+        self, *, partner_id: int | None
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        moves, moves_warning = self.optional_search_read(
+            "account.move",
+            [
+                ["partner_id", "child_of", partner_id],
+                ["move_type", "in", ["out_invoice", "out_refund"]],
+            ],
+            ["id", "name", "state", "payment_state", "invoice_date"],
+            limit=max(self.settings.max_courses * 4, 20),
+            order="invoice_date desc, id desc",
+        )
+        if moves_warning:
+            return [], moves_warning
+        if not moves:
+            return [], None
+
+        move_ids = [move["id"] for move in moves]
+        moves_by_id = {int(move["id"]): move for move in moves}
+        fields = self.model_fields("account.move.line")
+        desired_fields = [
+            field
+            for field in [
+                "id",
+                "move_id",
+                "product_id",
+                "name",
+                "quantity",
+                "display_type",
+            ]
+            if field in fields
+        ]
+        domain: list[Any] = [["move_id", "in", move_ids]]
+        if "display_type" in fields:
+            domain.append(["display_type", "not in", ["line_section", "line_note"]])
+
+        lines, lines_warning = self.optional_search_read(
+            "account.move.line",
+            domain,
+            desired_fields,
+            limit=max(self.settings.max_courses * 10, 50),
+            order="id desc",
+        )
+        if lines_warning:
+            return [], lines_warning
+
+        courses: list[dict[str, Any]] = []
+        for line in lines:
+            text = " ".join(
+                [
+                    str(line.get("name") or ""),
+                    str(line.get("product_id") or ""),
+                ]
+            )
+            if not _looks_like_course_line(text):
+                continue
+
+            move_ref = line.get("move_id")
+            move_id = int(move_ref[0]) if isinstance(move_ref, list | tuple) and move_ref else None
+            move = moves_by_id.get(move_id) if move_id else None
+            courses.append(
+                {
+                    "id": f"invoice_line:{line.get('id')}",
+                    "source": "invoice_line",
+                    "source_label": "Invoice course line",
+                    "channel_id": line.get("product_id") or line.get("name"),
+                    "member_status": (move or {}).get("state") or "-",
+                    "completion": None,
+                    "completed_slides_count": None,
+                    "next_slide_id": False,
+                    "description": line.get("name"),
+                    "quantity": line.get("quantity"),
+                    "invoice_id": move_ref,
+                    "invoice_name": (move or {}).get("name"),
                 }
             )
             if len(courses) >= self.settings.max_courses:

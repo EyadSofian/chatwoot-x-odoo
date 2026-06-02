@@ -1,4 +1,4 @@
-from app.services.odoo import _looks_like_course_line, _phone_tokens
+from app.services.odoo import _course_identity, _looks_like_course_line, _phone_tokens
 
 
 def test_phone_tokens_include_egyptian_local_and_international_forms():
@@ -12,3 +12,10 @@ def test_phone_tokens_include_egyptian_local_and_international_forms():
 
 def test_course_line_detection_matches_event_course_descriptions():
     assert _looks_like_course_line("Management - PMP - Event PMP Course Online")
+
+
+def test_course_identity_dedupes_sales_and_invoice_lines_for_same_course():
+    sales_course = {"source": "sale_order_line", "channel_id": [109, "PMP Course Online"]}
+    invoice_course = {"source": "invoice_line", "channel_id": [109, "PMP Course Online"]}
+
+    assert _course_identity(sales_course) == _course_identity(invoice_course)
