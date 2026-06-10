@@ -269,6 +269,28 @@ class OdooClient:
             include_custom=True,
         )
 
+    @cached_property
+    def partner_search_fields(self) -> list[str]:
+        return self.record_fields(
+            "res.partner",
+            [
+                "id",
+                "name",
+                "email",
+                "phone",
+                "mobile",
+                "phone_sanitized",
+                "company_name",
+                "commercial_partner_id",
+                "parent_id",
+                "type",
+                "is_company",
+                "customer_rank",
+                "user_id",
+                "write_date",
+            ],
+        )
+
     def model_fields(self, model: str) -> dict[str, Any]:
         if model in self._model_fields_cache:
             return self._model_fields_cache[model]
@@ -458,7 +480,7 @@ class OdooClient:
         partners = self.search_read(
             "res.partner",
             domain,
-            self.partner_fields,
+            self.partner_search_fields,
             limit=max(limit, 100),
             order="write_date desc",
         )
@@ -1235,10 +1257,20 @@ class OdooClient:
             matches = [partner] if partner else []
         elif query:
             matches = self.search_partners(query=query, email=email, phone=phone, limit=10)
-            partner = matches[0] if matches else None
+            candidate = matches[0] if matches else None
+            partner = (
+                self.get_partner(int(candidate["id"]))
+                if candidate and candidate.get("id")
+                else candidate
+            )
         else:
             matches = self.search_partners(email=email, phone=phone, limit=10)
-            partner = matches[0] if matches else None
+            candidate = matches[0] if matches else None
+            partner = (
+                self.get_partner(int(candidate["id"]))
+                if candidate and candidate.get("id")
+                else candidate
+            )
 
         partner_id = int(partner["id"]) if partner else None
         scope_ids = partner_scope_ids(partner)
