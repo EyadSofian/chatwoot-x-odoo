@@ -6,6 +6,7 @@
     snapshot: null,
     selectedPartnerId: null,
     themeChoice: localStorage.getItem("odoo-panel-theme") || "auto",
+    fieldLabels: {},
   };
 
   const els = {
@@ -19,11 +20,11 @@
     diagnosticsPanel: document.getElementById("diagnosticsPanel"),
     diagnosticsCount: document.getElementById("diagnosticsCount"),
     diagnosticsList: document.getElementById("diagnosticsList"),
-    metricContact: document.getElementById("metricContact"),
+    metricQuotations: document.getElementById("metricQuotations"),
+    metricSalesOrders: document.getElementById("metricSalesOrders"),
     metricLeads: document.getElementById("metricLeads"),
-    metricOrders: document.getElementById("metricOrders"),
     metricInvoices: document.getElementById("metricInvoices"),
-    metricJournalEntries: document.getElementById("metricJournalEntries"),
+    metricInvoicedItems: document.getElementById("metricInvoicedItems"),
     metricCourses: document.getElementById("metricCourses"),
     matchesPanel: document.getElementById("matchesPanel"),
     matchesCount: document.getElementById("matchesCount"),
@@ -32,7 +33,9 @@
     relatedContactsCount: document.getElementById("relatedContactsCount"),
     relatedContactsList: document.getElementById("relatedContactsList"),
     leadsList: document.getElementById("leadsList"),
-    ordersList: document.getElementById("ordersList"),
+    quotationsList: document.getElementById("quotationsList"),
+    salesOrdersList: document.getElementById("salesOrdersList"),
+    invoicedItemsList: document.getElementById("invoicedItemsList"),
     invoicesList: document.getElementById("invoicesList"),
     journalEntriesList: document.getElementById("journalEntriesList"),
     coursesList: document.getElementById("coursesList"),
@@ -41,7 +44,16 @@
 
   function valueOrDash(value) {
     if (value === false || value === null || value === undefined || value === "") return "-";
-    if (Array.isArray(value)) return value.length > 1 ? String(value[1]) : String(value[0]);
+    if (value === true) return "Yes";
+    if (Array.isArray(value)) {
+      if (value.length === 2 && typeof value[1] === "string") return String(value[1]);
+      return value.map((item) => valueOrDash(item)).join(", ");
+    }
+    if (typeof value === "object") return JSON.stringify(value);
+    if (typeof value === "string" && /<\/?[a-z][\s\S]*>/i.test(value)) {
+      const parsed = new DOMParser().parseFromString(value, "text/html");
+      return parsed.body.textContent.trim() || "-";
+    }
     return String(value);
   }
 
@@ -149,6 +161,91 @@
     return wrap;
   }
 
+  function humanizeField(field) {
+    return String(field || "")
+      .replace(/^x_/, "")
+      .replace(/_id$/, "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function fieldLabel(group, field) {
+    return state.fieldLabels?.[group]?.[field] || humanizeField(field);
+  }
+
+  function visibleFieldKeys(record, excluded, preferred) {
+    const excludedSet = new Set(excluded || []);
+    const preferredKeys = (preferred || []).filter(
+      (key) => Object.prototype.hasOwnProperty.call(record || {}, key) && !excludedSet.has(key)
+    );
+    const remaining = Object.keys(record || {})
+      .filter((key) => !excludedSet.has(key) && !preferredKeys.includes(key))
+      .sort((left, right) => fieldLabel("", left).localeCompare(fieldLabel("", right)));
+    return [...preferredKeys, ...remaining];
+  }
+
+  function appendRecordFields(target, record, group, options) {
+    const fields = document.createElement("dl");
+    fields.className = options?.className || "record-fields";
+    const keys = visibleFieldKeys(record, options?.exclude, options?.preferred);
+    keys.forEach((key) => fields.appendChild(detail(fieldLabel(group, key), record[key])));
+    if (keys.length > 0) target.appendChild(fields);
+  }
+
+  function appendLines(target, lines, group, currency) {
+    if (!Array.isArray(lines) || lines.length === 0) return;
+    const section = document.createElement("section");
+    section.className = "line-section";
+    const heading = document.createElement("h3");
+    heading.textContent = `Lines (${lines.length})`;
+    section.appendChild(heading);
+
+    lines.forEach((line) => {
+      const row = document.createElement("article");
+      row.className = "line-row";
+      const title = document.createElement("p");
+      const total = line.price_total ?? line.price_subtotal;
+      title.className = "line-title";
+      title.textContent = [
+        valueOrDash(line.product_id || line.name),
+        line.quantity !== undefined
+          ? `Qty ${valueOrDash(line.quantity)}`
+          : `Qty ${valueOrDash(line.product_uom_qty)}`,
+        total !== undefined ? money(total, line.currency_id || currency) : "",
+      ]
+        .filter(Boolean)
+        .join(" | ");
+      row.appendChild(title);
+      appendRecordFields(row, line, group, {
+        className: "record-fields is-compact",
+        exclude: ["order_id", "move_id"],
+        preferred: [
+          "id",
+          "name",
+          "product_id",
+          "product_uom_qty",
+          "quantity",
+          "product_uom",
+          "product_uom_id",
+          "qty_delivered",
+          "qty_invoiced",
+          "qty_to_invoice",
+          "invoice_status",
+          "price_unit",
+          "discount",
+          "tax_id",
+          "tax_ids",
+          "price_subtotal",
+          "price_tax",
+          "price_total",
+          "account_id",
+        ],
+      });
+      section.appendChild(row);
+    });
+    target.appendChild(section);
+  }
+
   function renderContact(partner) {
     clearNode(els.contactDetails);
     if (!partner) {
@@ -156,16 +253,39 @@
       return;
     }
 
-    els.contactDetails.append(
-      detail("Name", partner.name),
-      detail("Odoo ID", partner.id),
-      detail("Email", partner.email),
-      detail("Phone", partner.phone || partner.mobile),
-      detail("Salesperson", partner.user_id),
-      detail("Company", partner.company_name || partner.commercial_partner_id),
-      detail("VAT", partner.vat),
-      detail("City", partner.city),
-      detail("Country", partner.country_id)
+    visibleFieldKeys(
+      partner,
+      [],
+      [
+        "name",
+        "id",
+        "email",
+        "phone",
+        "mobile",
+        "user_id",
+        "team_id",
+        "company_name",
+        "commercial_partner_id",
+        "parent_id",
+        "vat",
+        "ref",
+        "function",
+        "street",
+        "street2",
+        "city",
+        "state_id",
+        "zip",
+        "country_id",
+        "website",
+        "property_payment_term_id",
+        "property_product_pricelist",
+        "credit",
+        "credit_limit",
+        "create_date",
+        "write_date",
+      ]
+    ).forEach((key) =>
+      els.contactDetails.appendChild(detail(fieldLabel("partner", key), partner[key]))
     );
   }
 
@@ -187,12 +307,16 @@
       `;
       item.querySelector(".record-title").textContent = valueOrDash(contact.name);
       item.querySelector(".record-meta").textContent = [
-        `ID: ${valueOrDash(contact.id)}`,
-        `Type: ${valueOrDash(contact.type)}`,
-        `Email: ${valueOrDash(contact.email)}`,
-        `Phone: ${valueOrDash(contact.phone || contact.mobile)}`,
-        `Parent: ${valueOrDash(contact.parent_id)}`,
-      ].join(" | ");
+        valueOrDash(contact.email),
+        valueOrDash(contact.phone || contact.mobile),
+        valueOrDash(contact.company_name || contact.parent_id),
+      ]
+        .filter((value) => value !== "-")
+        .join(" | ");
+      appendRecordFields(item, contact, "partner", {
+        exclude: ["name"],
+        preferred: ["id", "type", "email", "phone", "mobile", "parent_id", "user_id"],
+      });
       els.relatedContactsList.appendChild(item);
     });
   }
@@ -242,18 +366,41 @@
       `;
       item.querySelector(".record-title").textContent = `#${lead.id} ${valueOrDash(lead.name)}`;
       item.querySelector(".record-meta").textContent = [
+        `Type: ${valueOrDash(lead.type)}`,
         `Stage: ${valueOrDash(lead.stage_id)}`,
         `Revenue: ${money(lead.expected_revenue)}`,
+        `Probability: ${valueOrDash(lead.probability)}%`,
         `Owner: ${valueOrDash(lead.user_id)}`,
       ].join(" | ");
+      appendRecordFields(item, lead, "crm_lead", {
+        exclude: ["name"],
+        preferred: [
+          "id",
+          "type",
+          "stage_id",
+          "partner_id",
+          "expected_revenue",
+          "probability",
+          "priority",
+          "user_id",
+          "team_id",
+          "email_from",
+          "phone",
+          "mobile",
+          "date_deadline",
+          "create_date",
+          "date_open",
+          "date_closed",
+        ],
+      });
       els.leadsList.appendChild(item);
     });
   }
 
-  function renderOrders(orders) {
-    clearNode(els.ordersList);
+  function renderOrders(target, orders) {
+    clearNode(target);
     if (!orders || orders.length === 0) {
-      els.ordersList.appendChild(emptyNode());
+      target.appendChild(emptyNode());
       return;
     }
 
@@ -268,21 +415,47 @@
       item.querySelector(".record-title").textContent = valueOrDash(order.name);
       item.querySelector(".record-meta").textContent = [
         `State: ${valueOrDash(order.state)}`,
+        `Date: ${valueOrDash(order.date_order)}`,
         `Total: ${money(order.amount_total, order.currency_id)}`,
         `Invoice: ${valueOrDash(order.invoice_status)}`,
         `Salesperson: ${valueOrDash(order.user_id)}`,
       ].join(" | ");
 
-      (order.lines || []).slice(0, 4).forEach((line) => {
-        const lineItem = document.createElement("p");
-        lineItem.className = "line-item";
-        lineItem.textContent = `${valueOrDash(line.product_id)} x ${
-          line.product_uom_qty || 0
-        } - ${money(line.price_subtotal, order.currency_id)}`;
-        item.appendChild(lineItem);
+      appendRecordFields(item, order, "sale_order", {
+        exclude: ["name", "lines"],
+        preferred: [
+          "id",
+          "state",
+          "date_order",
+          "validity_date",
+          "commitment_date",
+          "client_order_ref",
+          "origin",
+          "partner_id",
+          "partner_invoice_id",
+          "partner_shipping_id",
+          "user_id",
+          "team_id",
+          "company_id",
+          "warehouse_id",
+          "pricelist_id",
+          "payment_term_id",
+          "amount_untaxed",
+          "amount_tax",
+          "amount_total",
+          "amount_invoiced",
+          "amount_to_invoice",
+          "amount_paid",
+          "invoice_status",
+          "invoice_count",
+          "invoice_ids",
+          "signed_by",
+          "signed_on",
+        ],
       });
+      appendLines(item, order.lines || [], "sale_order_line", order.currency_id);
 
-      els.ordersList.appendChild(item);
+      target.appendChild(item);
     });
   }
 
@@ -303,6 +476,7 @@
       `;
       item.querySelector(".record-title").textContent = valueOrDash(invoice.name);
       item.querySelector(".record-meta").textContent = [
+        `Type: ${valueOrDash(invoice.move_type)}`,
         `State: ${valueOrDash(invoice.state)}`,
         `Payment: ${valueOrDash(invoice.payment_state)}`,
         `Total: ${money(invoice.amount_total, invoice.currency_id)}`,
@@ -310,16 +484,84 @@
         `Salesperson: ${valueOrDash(invoice.invoice_user_id)}`,
       ].join(" | ");
 
-      (invoice.lines || []).slice(0, 4).forEach((line) => {
-        const lineItem = document.createElement("p");
-        lineItem.className = "line-item";
-        lineItem.textContent = `${valueOrDash(line.product_id || line.name)} x ${
-          line.quantity || 0
-        } - ${money(line.price_subtotal, invoice.currency_id)}`;
-        item.appendChild(lineItem);
+      appendRecordFields(item, invoice, "invoice", {
+        exclude: ["name", "lines"],
+        preferred: [
+          "id",
+          "move_type",
+          "state",
+          "invoice_date",
+          "invoice_date_due",
+          "invoice_origin",
+          "ref",
+          "payment_reference",
+          "partner_id",
+          "invoice_user_id",
+          "company_id",
+          "journal_id",
+          "invoice_payment_term_id",
+          "amount_untaxed",
+          "amount_tax",
+          "amount_total",
+          "amount_residual",
+          "payment_state",
+          "reversed_entry_id",
+        ],
       });
+      appendLines(item, invoice.lines || [], "invoice_line", invoice.currency_id);
 
       els.invoicesList.appendChild(item);
+    });
+  }
+
+  function renderInvoicedItems(items) {
+    clearNode(els.invoicedItemsList);
+    if (!items || items.length === 0) {
+      els.invoicedItemsList.appendChild(emptyNode());
+      return;
+    }
+
+    items.forEach((line) => {
+      const item = document.createElement("article");
+      item.className = "record-item";
+      item.innerHTML = `
+        <p class="record-title"></p>
+        <p class="record-meta"></p>
+      `;
+      item.querySelector(".record-title").textContent = valueOrDash(line.product_id || line.name);
+      item.querySelector(".record-meta").textContent = [
+        `Invoice: ${valueOrDash(line.invoice_name)}`,
+        `Date: ${valueOrDash(line.invoice_date)}`,
+        `Qty: ${valueOrDash(line.quantity)}`,
+        `Subtotal: ${money(line.price_subtotal, line.currency_id || line.invoice_currency_id)}`,
+        `Payment: ${valueOrDash(line.payment_state)}`,
+      ].join(" | ");
+      appendRecordFields(item, line, "invoice_line", {
+        exclude: ["move_id"],
+        preferred: [
+          "id",
+          "invoice_name",
+          "invoice_type",
+          "invoice_state",
+          "invoice_date",
+          "invoice_date_due",
+          "invoice_origin",
+          "payment_state",
+          "invoice_user_id",
+          "product_id",
+          "name",
+          "quantity",
+          "product_uom_id",
+          "price_unit",
+          "discount",
+          "tax_ids",
+          "price_subtotal",
+          "price_total",
+          "account_id",
+          "sale_line_ids",
+        ],
+      });
+      els.invoicedItemsList.appendChild(item);
     });
   }
 
@@ -347,7 +589,23 @@
         `Credit: ${money(entry.partner_credit, entry.currency_id)}`,
       ].join(" | ");
 
-      (entry.lines || []).slice(0, 6).forEach((line) => {
+      appendRecordFields(item, entry, "invoice", {
+        exclude: ["name", "lines"],
+        preferred: [
+          "id",
+          "date",
+          "journal_id",
+          "state",
+          "ref",
+          "company_id",
+          "partner_id",
+          "partner_debit",
+          "partner_credit",
+          "partner_balance",
+        ],
+      });
+
+      (entry.lines || []).forEach((line) => {
         const lineItem = document.createElement("p");
         lineItem.className = "line-item";
         lineItem.textContent = [
@@ -411,6 +669,22 @@
         description.textContent = valueOrDash(course.description);
         item.appendChild(description);
       }
+
+      appendRecordFields(item, course, "", {
+        exclude: ["channel_id", "description"],
+        preferred: [
+          "id",
+          "source_label",
+          "member_status",
+          "completion",
+          "completed_slides_count",
+          "next_slide_id",
+          "order_name",
+          "invoice_name",
+          "salesperson",
+          "quantity",
+        ],
+      });
 
       if (hasProgress) {
         const progressTrack = document.createElement("div");
@@ -478,20 +752,38 @@
 
   function renderSnapshot(snapshot) {
     state.snapshot = snapshot;
+    state.fieldLabels = snapshot.field_labels || {};
     const partner = snapshot.partner || null;
     const relatedContacts = snapshot.related_contacts || [];
     const leads = snapshot.leads || [];
     const orders = snapshot.orders || [];
+    const quotations =
+      snapshot.quotations || orders.filter((order) => ["draft", "sent"].includes(order.state));
+    const salesOrders =
+      snapshot.sales_orders || orders.filter((order) => !["draft", "sent"].includes(order.state));
     const invoices = snapshot.invoices || [];
+    const invoicedItems =
+      snapshot.invoiced_items ||
+      invoices.flatMap((invoice) =>
+        (invoice.lines || []).map((line) => ({
+          ...line,
+          invoice_id: invoice.id,
+          invoice_name: invoice.name,
+          invoice_date: invoice.invoice_date,
+          payment_state: invoice.payment_state,
+          invoice_user_id: invoice.invoice_user_id,
+          invoice_currency_id: invoice.currency_id,
+        }))
+      );
     const journalEntries = snapshot.journal_entries || [];
     const courses = snapshot.courses || [];
     const warnings = snapshot.warnings || [];
 
-    els.metricContact.textContent = partner ? valueOrDash(partner.name) : "-";
+    els.metricQuotations.textContent = String(quotations.length);
+    els.metricSalesOrders.textContent = String(salesOrders.length);
     els.metricLeads.textContent = String(leads.length);
-    els.metricOrders.textContent = String(orders.length);
     els.metricInvoices.textContent = String(invoices.length);
-    els.metricJournalEntries.textContent = String(journalEntries.length);
+    els.metricInvoicedItems.textContent = String(invoicedItems.length);
     els.metricCourses.textContent = String(courses.length);
     els.noteButton.disabled = !state.lastLookup.conversationId;
 
@@ -499,7 +791,9 @@
     renderContact(partner);
     renderRelatedContacts(relatedContacts);
     renderLeads(leads);
-    renderOrders(orders);
+    renderOrders(els.quotationsList, quotations);
+    renderOrders(els.salesOrdersList, salesOrders);
+    renderInvoicedItems(invoicedItems);
     renderInvoices(invoices);
     renderJournalEntries(journalEntries);
     renderCourses(courses);

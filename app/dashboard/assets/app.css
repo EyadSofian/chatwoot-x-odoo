@@ -333,6 +333,8 @@ input:focus {
   margin-top: 4px;
   color: var(--muted);
   font-size: 12px;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .record-item.is-warning {
@@ -363,25 +365,70 @@ input:focus {
   margin: 0;
 }
 
-.details-list div {
+.details-list div,
+.record-fields div {
   min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--surface-soft);
   padding: 10px;
 }
 
-.details-list dt {
+.details-list div {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.details-list dt,
+.record-fields dt {
   color: var(--muted);
   font-size: 12px;
   font-weight: 650;
 }
 
-.details-list dd {
+.details-list dd,
+.record-fields dd {
   margin: 4px 0 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.record-fields {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 10px 0 0;
+  border-top: 1px solid var(--border);
+}
+
+.record-fields div {
+  border-bottom: 1px solid var(--border);
+}
+
+.record-fields.is-compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 6px;
+}
+
+.line-section {
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.line-section h3 {
+  margin: 0;
+  padding: 10px 0 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.line-row {
+  padding: 8px 0;
+  border-top: 1px solid var(--border);
+}
+
+.line-title {
+  font-size: 12px;
+  font-weight: 750;
+  overflow-wrap: anywhere;
 }
 
 .tabs {
@@ -426,8 +473,13 @@ input:focus {
     grid-template-columns: 1fr;
   }
 
-  .metrics,
-  .details-list {
+  .metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .details-list,
+  .record-fields,
+  .record-fields.is-compact {
     grid-template-columns: 1fr;
   }
 }

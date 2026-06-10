@@ -37,21 +37,55 @@ def _or_domain(clauses: list[list[Any]]) -> list[Any]:
 PARTNER_BASE_FIELDS = [
     "id",
     "name",
+    "display_name",
     "email",
     "phone",
     "mobile",
+    "website",
+    "function",
+    "title",
     "company_name",
     "commercial_partner_id",
     "parent_id",
     "type",
+    "company_type",
     "is_company",
+    "active",
     "vat",
+    "ref",
+    "street",
+    "street2",
     "city",
+    "state_id",
+    "zip",
     "country_id",
+    "lang",
+    "category_id",
+    "comment",
     "customer_rank",
+    "supplier_rank",
     "user_id",
+    "team_id",
+    "property_payment_term_id",
+    "property_product_pricelist",
+    "credit",
+    "credit_limit",
+    "create_date",
+    "write_date",
 ]
 OPTIONAL_PARTNER_FIELDS = ["phone_sanitized"]
+DISPLAYABLE_CUSTOM_FIELD_TYPES = {
+    "boolean",
+    "char",
+    "date",
+    "datetime",
+    "float",
+    "integer",
+    "many2one",
+    "monetary",
+    "selection",
+    "text",
+}
 
 
 def _phone_tokens(value: str | None) -> list[str]:
@@ -229,13 +263,11 @@ class OdooClient:
 
     @cached_property
     def partner_fields(self) -> list[str]:
-        available = self.model_fields("res.partner")
-        if not available:
-            return PARTNER_BASE_FIELDS
-
-        fields = list(PARTNER_BASE_FIELDS)
-        fields.extend(field for field in OPTIONAL_PARTNER_FIELDS if field in available)
-        return fields
+        return self.record_fields(
+            "res.partner",
+            PARTNER_BASE_FIELDS + OPTIONAL_PARTNER_FIELDS,
+            include_custom=True,
+        )
 
     def model_fields(self, model: str) -> dict[str, Any]:
         if model in self._model_fields_cache:
@@ -246,7 +278,7 @@ class OdooClient:
                 model,
                 "fields_get",
                 [],
-                {"attributes": ["string"]},
+                {"attributes": ["string", "type"]},
             )
         except xmlrpc.client.Fault:
             logger.warning("Could not inspect Odoo model fields for %s", model, exc_info=True)
@@ -277,6 +309,34 @@ class OdooClient:
         if not available:
             return desired_fields
         return [field for field in desired_fields if field in available]
+
+    def record_fields(
+        self,
+        model: str,
+        desired_fields: list[str],
+        *,
+        include_custom: bool = False,
+    ) -> list[str]:
+        available = self.model_fields(model)
+        if not available:
+            return list(dict.fromkeys(desired_fields))
+
+        fields = [field for field in desired_fields if field in available]
+        if include_custom:
+            fields.extend(
+                field
+                for field, metadata in available.items()
+                if field.startswith("x_")
+                and metadata.get("type") in DISPLAYABLE_CUSTOM_FIELD_TYPES
+            )
+        return list(dict.fromkeys(fields))
+
+    def field_labels(self, model: str, fields: set[str]) -> dict[str, str]:
+        metadata = self.model_fields(model)
+        return {
+            field: str(metadata.get(field, {}).get("string") or field)
+            for field in sorted(fields)
+        }
 
     def partner_link_domain(
         self,
@@ -458,24 +518,53 @@ class OdooClient:
         if not clauses:
             return [], None
 
-        return self.optional_search_read(
+        lead_fields = self.record_fields(
             "crm.lead",
-            _or_domain(clauses),
             [
                 "id",
                 "name",
                 "type",
+                "active",
+                "partner_id",
+                "partner_name",
+                "contact_name",
                 "stage_id",
                 "expected_revenue",
                 "probability",
+                "recurring_revenue",
+                "recurring_plan",
+                "priority",
                 "email_from",
                 "phone",
                 "mobile",
+                "street",
+                "street2",
+                "city",
+                "state_id",
+                "zip",
+                "country_id",
                 "create_date",
+                "date_open",
+                "date_closed",
                 "date_deadline",
+                "date_last_stage_update",
                 "user_id",
                 "team_id",
+                "company_id",
+                "campaign_id",
+                "medium_id",
+                "source_id",
+                "tag_ids",
+                "description",
+                "lost_reason_id",
+                "write_date",
             ],
+            include_custom=True,
+        )
+        return self.optional_search_read(
+            "crm.lead",
+            _or_domain(clauses),
+            lead_fields,
             limit=self.settings.max_leads,
             order="write_date desc",
         )
@@ -496,20 +585,60 @@ class OdooClient:
                 "partner_shipping_id",
             ),
         )
-        orders, warning = self.optional_search_read(
+        order_fields = self.record_fields(
             "sale.order",
-            partner_domain,
             [
                 "id",
                 "name",
                 "state",
+                "locked",
                 "date_order",
-                "amount_total",
-                "currency_id",
-                "invoice_status",
+                "create_date",
+                "validity_date",
+                "commitment_date",
+                "expected_date",
+                "client_order_ref",
+                "origin",
+                "reference",
                 "partner_id",
+                "commercial_partner_id",
+                "partner_invoice_id",
+                "partner_shipping_id",
                 "user_id",
+                "team_id",
+                "company_id",
+                "warehouse_id",
+                "pricelist_id",
+                "currency_id",
+                "payment_term_id",
+                "fiscal_position_id",
+                "journal_id",
+                "amount_untaxed",
+                "amount_tax",
+                "amount_total",
+                "amount_to_invoice",
+                "amount_invoiced",
+                "amount_paid",
+                "invoice_status",
+                "invoice_count",
+                "invoice_ids",
+                "require_signature",
+                "require_payment",
+                "signed_by",
+                "signed_on",
+                "campaign_id",
+                "medium_id",
+                "source_id",
+                "tag_ids",
+                "note",
+                "write_date",
             ],
+            include_custom=True,
+        )
+        orders, warning = self.optional_search_read(
+            "sale.order",
+            partner_domain,
+            order_fields,
             limit=self.settings.max_orders,
             order="date_order desc",
         )
@@ -517,18 +646,46 @@ class OdooClient:
             return orders, warning
 
         order_ids = [order["id"] for order in orders]
+        line_fields = self.record_fields(
+            "sale.order.line",
+            [
+                "id",
+                "order_id",
+                "sequence",
+                "display_type",
+                "product_id",
+                "name",
+                "product_template_id",
+                "product_uom_qty",
+                "product_uom",
+                "qty_delivered",
+                "qty_invoiced",
+                "qty_to_invoice",
+                "invoice_status",
+                "price_unit",
+                "discount",
+                "tax_id",
+                "price_subtotal",
+                "price_tax",
+                "price_total",
+                "currency_id",
+                "customer_lead",
+                "is_downpayment",
+                "invoice_lines",
+                "event_id",
+                "event_ticket_id",
+                "analytic_distribution",
+                "create_date",
+                "write_date",
+            ],
+            include_custom=True,
+        )
         lines, lines_warning = self.optional_search_read(
             "sale.order.line",
             [["order_id", "in", order_ids]],
-            [
-                "order_id",
-                "product_id",
-                "product_uom_qty",
-                "price_unit",
-                "price_subtotal",
-            ],
-            limit=self.settings.max_orders * 10,
-            order="id asc",
+            line_fields,
+            limit=max(self.settings.max_orders * 50, 250),
+            order="sequence asc, id asc",
         )
         lines_by_order: dict[int, list[dict[str, Any]]] = {}
         for line in lines:
@@ -551,23 +708,54 @@ class OdooClient:
             partner_ids,
             candidate_fields=("partner_id", "commercial_partner_id"),
         )
-        invoices, warning = self.optional_search_read(
+        invoice_fields = self.record_fields(
             "account.move",
-            partner_domain + [["move_type", "in", ["out_invoice", "out_refund"]]],
             [
                 "id",
                 "name",
+                "ref",
                 "move_type",
                 "state",
+                "date",
                 "invoice_date",
                 "invoice_date_due",
+                "invoice_origin",
+                "payment_reference",
+                "partner_id",
+                "commercial_partner_id",
+                "invoice_partner_display_name",
+                "invoice_user_id",
+                "company_id",
+                "journal_id",
+                "currency_id",
+                "invoice_currency_rate",
+                "invoice_payment_term_id",
+                "fiscal_position_id",
+                "amount_untaxed",
+                "amount_tax",
                 "amount_total",
                 "amount_residual",
-                "currency_id",
+                "amount_untaxed_signed",
+                "amount_tax_signed",
+                "amount_total_signed",
+                "amount_residual_signed",
                 "payment_state",
-                "invoice_origin",
-                "invoice_user_id",
+                "reversed_entry_id",
+                "invoice_incoterm_id",
+                "invoice_cash_rounding_id",
+                "narration",
+                "campaign_id",
+                "medium_id",
+                "source_id",
+                "create_date",
+                "write_date",
             ],
+            include_custom=True,
+        )
+        invoices, warning = self.optional_search_read(
+            "account.move",
+            partner_domain + [["move_type", "in", ["out_invoice", "out_refund"]]],
+            invoice_fields,
             limit=self.settings.max_invoices,
             order="invoice_date desc, id desc",
         )
@@ -575,22 +763,44 @@ class OdooClient:
             return invoices, warning
 
         invoice_ids = [invoice["id"] for invoice in invoices]
+        invoice_line_fields = self.record_fields(
+            "account.move.line",
+            [
+                "id",
+                "move_id",
+                "sequence",
+                "display_type",
+                "product_id",
+                "product_uom_id",
+                "name",
+                "quantity",
+                "price_unit",
+                "discount",
+                "tax_ids",
+                "price_subtotal",
+                "price_total",
+                "balance",
+                "amount_currency",
+                "currency_id",
+                "account_id",
+                "analytic_distribution",
+                "sale_line_ids",
+                "date",
+                "date_maturity",
+                "create_date",
+                "write_date",
+            ],
+            include_custom=True,
+        )
         lines, lines_warning = self.optional_search_read(
             "account.move.line",
             [
                 ["move_id", "in", invoice_ids],
-                ["display_type", "not in", ["line_section", "line_note"]],
+                ["display_type", "in", ["product", False]],
             ],
-            [
-                "move_id",
-                "product_id",
-                "name",
-                "quantity",
-                "price_unit",
-                "price_subtotal",
-            ],
-            limit=self.settings.max_invoices * 10,
-            order="id asc",
+            invoice_line_fields,
+            limit=max(self.settings.max_invoices * 50, 250),
+            order="sequence asc, id asc",
         )
         lines_by_invoice: dict[int, list[dict[str, Any]]] = {}
         for line in lines:
@@ -1046,6 +1256,31 @@ class OdooClient:
         invoices, invoices_warning = (
             self.get_invoices(partner_ids=scope_ids) if include_invoices else ([], None)
         )
+        quotations = [
+            order for order in orders if order.get("state") in {"draft", "sent"}
+        ]
+        sales_orders = [
+            order for order in orders if order.get("state") not in {"draft", "sent"}
+        ]
+        invoiced_items: list[dict[str, Any]] = []
+        for invoice in invoices:
+            for invoice_line in invoice.get("lines", []):
+                item = dict(invoice_line)
+                item.update(
+                    {
+                        "invoice_id": invoice.get("id"),
+                        "invoice_name": invoice.get("name"),
+                        "invoice_type": invoice.get("move_type"),
+                        "invoice_state": invoice.get("state"),
+                        "invoice_date": invoice.get("invoice_date"),
+                        "invoice_date_due": invoice.get("invoice_date_due"),
+                        "invoice_origin": invoice.get("invoice_origin"),
+                        "payment_state": invoice.get("payment_state"),
+                        "invoice_user_id": invoice.get("invoice_user_id"),
+                        "invoice_currency_id": invoice.get("currency_id"),
+                    }
+                )
+                invoiced_items.append(item)
         journal_entries, journal_entries_warning = (
             self.get_journal_entries(partner_ids=scope_ids)
             if include_journal_entries
@@ -1067,19 +1302,52 @@ class OdooClient:
 
         logger.info(
             "Odoo snapshot loaded partner=%s commercial=%s scope=%s "
-            "contacts=%s leads=%s orders=%s invoices=%s journal_entries=%s "
-            "courses=%s warnings=%s",
+            "contacts=%s leads=%s quotations=%s sales_orders=%s invoices=%s "
+            "invoiced_items=%s journal_entries=%s courses=%s warnings=%s",
             partner_id,
             commercial_id,
             scope_ids,
             len(related_contacts),
             len(leads),
-            len(orders),
+            len(quotations),
+            len(sales_orders),
             len(invoices),
+            len(invoiced_items),
             len(journal_entries),
             len(courses),
             len(warnings),
         )
+
+        def record_keys(records: list[dict[str, Any]]) -> set[str]:
+            return {key for record in records for key in record}
+
+        order_line_keys = record_keys(
+            [
+                line
+                for order in orders
+                for line in order.get("lines", [])
+                if isinstance(line, dict)
+            ]
+        )
+        invoice_line_keys = record_keys(
+            [
+                line
+                for invoice in invoices
+                for line in invoice.get("lines", [])
+                if isinstance(line, dict)
+            ]
+        )
+        field_labels = {
+            "partner": self.field_labels(
+                "res.partner",
+                set(partner or {}) | record_keys(related_contacts),
+            ),
+            "crm_lead": self.field_labels("crm.lead", record_keys(leads)),
+            "sale_order": self.field_labels("sale.order", record_keys(orders)),
+            "sale_order_line": self.field_labels("sale.order.line", order_line_keys),
+            "invoice": self.field_labels("account.move", record_keys(invoices)),
+            "invoice_line": self.field_labels("account.move.line", invoice_line_keys),
+        }
         debug = {
             "partner_id": partner_id,
             "commercial_partner_id": commercial_id,
@@ -1092,7 +1360,10 @@ class OdooClient:
                 "related_contacts": len(related_contacts),
                 "leads": len(leads),
                 "orders": len(orders),
+                "quotations": len(quotations),
+                "sales_orders": len(sales_orders),
                 "invoices": len(invoices),
+                "invoiced_items": len(invoiced_items),
                 "journal_entries": len(journal_entries),
                 "courses": len(courses),
             },
@@ -1103,9 +1374,13 @@ class OdooClient:
             "related_contacts": related_contacts,
             "leads": leads,
             "orders": orders,
+            "quotations": quotations,
+            "sales_orders": sales_orders,
             "invoices": invoices,
+            "invoiced_items": invoiced_items,
             "journal_entries": journal_entries,
             "courses": courses,
+            "field_labels": field_labels,
             "warnings": warnings,
             "debug": debug,
         }

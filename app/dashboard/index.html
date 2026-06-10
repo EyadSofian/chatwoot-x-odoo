@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Odoo Customer Panel</title>
+    <title>Odoo Customer 360</title>
     <link rel="stylesheet" href="/dashboard/assets/app.css" />
   </head>
   <body>
@@ -11,7 +11,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow">Odoo 17</p>
-          <h1>Customer Panel</h1>
+          <h1>Customer 360</h1>
         </div>
         <div class="topbar-actions" aria-label="Theme">
           <button class="theme-button is-active" type="button" data-theme-choice="auto">Auto</button>
@@ -56,24 +56,24 @@
 
       <section class="metrics" aria-label="Customer metrics">
         <article class="metric">
-          <span class="metric-label">Contact</span>
-          <strong id="metricContact">-</strong>
+          <span class="metric-label">Quotations</span>
+          <strong id="metricQuotations">0</strong>
         </article>
         <article class="metric">
-          <span class="metric-label">CRM</span>
-          <strong id="metricLeads">0</strong>
-        </article>
-        <article class="metric">
-          <span class="metric-label">Orders</span>
-          <strong id="metricOrders">0</strong>
+          <span class="metric-label">Sales Orders</span>
+          <strong id="metricSalesOrders">0</strong>
         </article>
         <article class="metric">
           <span class="metric-label">Invoices</span>
           <strong id="metricInvoices">0</strong>
         </article>
         <article class="metric">
-          <span class="metric-label">Journal Entries</span>
-          <strong id="metricJournalEntries">0</strong>
+          <span class="metric-label">Invoiced Items</span>
+          <strong id="metricInvoicedItems">0</strong>
+        </article>
+        <article class="metric">
+          <span class="metric-label">CRM</span>
+          <strong id="metricLeads">0</strong>
         </article>
         <article class="metric">
           <span class="metric-label">Courses</span>
@@ -91,29 +91,35 @@
 
       <section class="tabs" aria-label="Odoo data tabs">
         <div class="tab-list" role="tablist">
-          <button class="tab is-active" type="button" data-tab="contact">Contact</button>
+          <button class="tab is-active" type="button" data-tab="profile">Profile</button>
           <button class="tab" type="button" data-tab="crm">CRM</button>
-          <button class="tab" type="button" data-tab="orders">Orders</button>
+          <button class="tab" type="button" data-tab="quotations">Quotations</button>
+          <button class="tab" type="button" data-tab="sales-orders">Sales Orders</button>
+          <button class="tab" type="button" data-tab="invoiced-items">Invoiced Items</button>
           <button class="tab" type="button" data-tab="invoices">Invoices</button>
-          <button class="tab" type="button" data-tab="journal">Journal Entries</button>
           <button class="tab" type="button" data-tab="courses">Courses</button>
+          <button class="tab" type="button" data-tab="journal">Journal</button>
+          <button class="tab" type="button" data-tab="contacts">Contacts</button>
         </div>
 
-        <article id="tab-contact" class="tab-panel">
+        <article id="tab-profile" class="tab-panel">
           <dl id="contactDetails" class="details-list"></dl>
-          <div class="subsection-header">
-            <h2>Related Contacts</h2>
-            <span id="relatedContactsCount" class="badge">0</span>
-          </div>
-          <div id="relatedContactsList" class="record-list"></div>
         </article>
 
         <article id="tab-crm" class="tab-panel is-hidden">
           <div id="leadsList" class="record-list"></div>
         </article>
 
-        <article id="tab-orders" class="tab-panel is-hidden">
-          <div id="ordersList" class="record-list"></div>
+        <article id="tab-quotations" class="tab-panel is-hidden">
+          <div id="quotationsList" class="record-list"></div>
+        </article>
+
+        <article id="tab-sales-orders" class="tab-panel is-hidden">
+          <div id="salesOrdersList" class="record-list"></div>
+        </article>
+
+        <article id="tab-invoiced-items" class="tab-panel is-hidden">
+          <div id="invoicedItemsList" class="record-list"></div>
         </article>
 
         <article id="tab-invoices" class="tab-panel is-hidden">
@@ -126,6 +132,14 @@
 
         <article id="tab-courses" class="tab-panel is-hidden">
           <div id="coursesList" class="record-list"></div>
+        </article>
+
+        <article id="tab-contacts" class="tab-panel is-hidden">
+          <div class="section-header">
+            <h2>Related Contacts</h2>
+            <span id="relatedContactsCount" class="badge">0</span>
+          </div>
+          <div id="relatedContactsList" class="record-list"></div>
         </article>
       </section>
     </main>

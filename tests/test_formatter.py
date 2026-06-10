@@ -91,7 +91,10 @@ def test_formats_snapshot_and_attributes():
     assert attrs["odoo_partner_salesperson"] == "Mona Sales"
     assert attrs["odoo_last_order_salesperson"] == "Mona Sales"
     assert attrs["odoo_last_invoice_salesperson"] == "Mona Sales"
+    assert attrs["odoo_quotations_count"] == 0
+    assert attrs["odoo_sales_orders_count"] == 1
     assert attrs["odoo_invoices_count"] == 1
+    assert attrs["odoo_invoiced_items_count"] == 1
     assert attrs["odoo_journal_entries_count"] == 1
     assert attrs["odoo_last_journal_entry"] == "MISC/2026/0042"
     assert attrs["odoo_related_contacts_count"] == 1

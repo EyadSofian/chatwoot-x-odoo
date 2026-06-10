@@ -12,8 +12,14 @@ The first production path is read-only toward Odoo:
 - Show the matched contact and related company/child contacts.
 - Search contacts manually by name, email, or phone.
 - Show related `crm.lead` records.
-- Show recent `sale.order` records and their lines.
-- Show recent customer invoices from `account.move` and invoice lines.
+- Split `sale.order` records into Quotations and confirmed Sales Orders.
+- Show complete commercial fields and every returned sales order line, including
+  quantities delivered/invoiced, discounts, taxes, totals, salesperson, sales
+  team, addresses, payment terms, and linked invoices.
+- Show customer invoices from `account.move`, their complete business fields,
+  and every returned invoice line.
+- Show a separate Invoiced Items view that links each product/service to its
+  invoice, due date, payment state, origin, and salesperson.
 - Show related journal entries from customer `account.move.line` records and
   their `account.move` entry.
 - Show eLearning course memberships from `slide.channel.partner`, including
@@ -76,7 +82,11 @@ ODOO_URL=https://engosoft.com
 ODOO_DB=...
 ODOO_USERNAME=api-user@example.com
 ODOO_PASSWORD=...
-MAX_JOURNAL_ENTRIES=5
+MAX_LEADS=20
+MAX_ORDERS=20
+MAX_INVOICES=20
+MAX_JOURNAL_ENTRIES=20
+MAX_COURSES=20
 ```
 
 Run locally:
@@ -135,8 +145,10 @@ The dashboard app will:
 - Receive the current conversation context from Chatwoot.
 - Auto-search Odoo using the contact name, email, and phone.
 - Let agents manually search by name, email, or phone.
-- Show contact, related contacts, CRM, sales order, invoice, journal entry, and
-  course tabs.
+- Show Customer Profile, CRM, Quotations, Sales Orders, Invoiced Items, Invoices,
+  Courses, Journal, and Related Contacts tabs.
+- Show Odoo custom fields (`x_*`) when they are readable scalar or many2one
+  fields.
 - Show the contact salesperson, sales order salesperson, and invoice salesperson.
 - Show every section to every signed-in Chatwoot agent.
 - Show a Diagnostics panel with the partner search scope and optional-model
@@ -167,11 +179,14 @@ Sensitive commercial attributes are only updated when
 
 ```text
 odoo_orders_count
+odoo_quotations_count
+odoo_sales_orders_count
 odoo_last_order
 odoo_last_order_state
 odoo_last_order_total
 odoo_last_order_salesperson
 odoo_invoices_count
+odoo_invoiced_items_count
 odoo_last_invoice
 odoo_last_invoice_payment_state
 odoo_last_invoice_due

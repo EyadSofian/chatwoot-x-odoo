@@ -140,9 +140,13 @@ async def dashboard_search(
             "related_contacts": [],
             "leads": [],
             "orders": [],
+            "quotations": [],
+            "sales_orders": [],
             "invoices": [],
+            "invoiced_items": [],
             "journal_entries": [],
             "courses": [],
+            "field_labels": {},
             "warnings": [],
             "restricted_sections": restricted_sections,
             "agent": {

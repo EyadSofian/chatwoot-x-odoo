@@ -19,7 +19,7 @@ def test_dashboard_loads_without_token_when_token_is_not_configured(monkeypatch)
     response = TestClient(app).get("/dashboard")
 
     assert response.status_code == 200
-    assert "Odoo Customer Panel" in response.text
+    assert "Odoo Customer 360" in response.text
 
 
 def test_dashboard_rejects_invalid_token(monkeypatch):
@@ -47,9 +47,13 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
         "related_contacts": [],
         "leads": [],
         "orders": [],
+        "quotations": [],
+        "sales_orders": [],
         "invoices": [],
+        "invoiced_items": [],
         "journal_entries": [],
         "courses": [],
+        "field_labels": {},
         "warnings": [],
         "restricted_sections": [],
         "agent": {"email": "", "id": "", "name": ""},

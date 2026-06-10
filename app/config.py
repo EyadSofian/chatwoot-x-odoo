@@ -112,11 +112,11 @@ class Settings:
             allow_unsigned_webhooks=_env_bool("ALLOW_UNSIGNED_WEBHOOKS", False),
             webhook_tolerance_seconds=_env_int("WEBHOOK_TOLERANCE_SECONDS", 300),
             sync_ttl_seconds=_env_int("SYNC_TTL_SECONDS", 1800),
-            max_leads=_env_int("MAX_LEADS", 5),
-            max_orders=_env_int("MAX_ORDERS", 5),
-            max_invoices=_env_int("MAX_INVOICES", 5),
-            max_journal_entries=_env_int("MAX_JOURNAL_ENTRIES", 5),
-            max_courses=_env_int("MAX_COURSES", 5),
+            max_leads=_env_int("MAX_LEADS", 20),
+            max_orders=_env_int("MAX_ORDERS", 20),
+            max_invoices=_env_int("MAX_INVOICES", 20),
+            max_journal_entries=_env_int("MAX_JOURNAL_ENTRIES", 20),
+            max_courses=_env_int("MAX_COURSES", 20),
             app_state_db_path=Path(_env("APP_STATE_DB_PATH", "data/integration.sqlite3")),
         )
 

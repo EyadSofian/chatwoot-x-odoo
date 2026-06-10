@@ -28,7 +28,19 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     related_contacts = snapshot.get("related_contacts", [])
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", [])
+    quotations = snapshot.get(
+        "quotations",
+        [order for order in orders if order.get("state") in {"draft", "sent"}],
+    )
+    sales_orders = snapshot.get(
+        "sales_orders",
+        [order for order in orders if order.get("state") not in {"draft", "sent"}],
+    )
     invoices = snapshot.get("invoices", [])
+    invoiced_items = snapshot.get(
+        "invoiced_items",
+        [line for invoice in invoices for line in invoice.get("lines", [])],
+    )
     journal_entries = snapshot.get("journal_entries", [])
     courses = snapshot.get("courses", [])
     warnings = snapshot.get("warnings", [])
@@ -80,10 +92,12 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
     lines.append("")
     if "orders" in restricted_sections:
         lines.append("Recent sales orders: restricted for current agent")
+        lines.append("Quotations: restricted for current agent")
     else:
-        lines.append(f"Recent sales orders: {len(orders)}")
+        lines.append(f"Quotations: {len(quotations)}")
+        lines.append(f"Sales orders: {len(sales_orders)}")
     if orders and "orders" not in restricted_sections:
-        for order in orders[:5]:
+        for order in (quotations + sales_orders)[:5]:
             state = order.get("state") or "-"
             total = _money(order.get("amount_total"), order.get("currency_id"))
             invoice_status = order.get("invoice_status") or "-"
@@ -103,6 +117,7 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
         lines.append("Recent invoices: restricted for current agent")
     else:
         lines.append(f"Recent invoices: {len(invoices)}")
+        lines.append(f"Invoiced items: {len(invoiced_items)}")
     if invoices and "invoices" not in restricted_sections:
         for invoice in invoices[:5]:
             total = _money(invoice.get("amount_total"), invoice.get("currency_id"))
@@ -177,7 +192,31 @@ def conversation_attributes(
     related_contacts = snapshot.get("related_contacts", [])
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", []) if include_sensitive else []
+    quotations = (
+        snapshot.get(
+            "quotations",
+            [order for order in orders if order.get("state") in {"draft", "sent"}],
+        )
+        if include_sensitive
+        else []
+    )
+    sales_orders = (
+        snapshot.get(
+            "sales_orders",
+            [order for order in orders if order.get("state") not in {"draft", "sent"}],
+        )
+        if include_sensitive
+        else []
+    )
     invoices = snapshot.get("invoices", []) if include_sensitive else []
+    invoiced_items = (
+        snapshot.get(
+            "invoiced_items",
+            [line for invoice in invoices for line in invoice.get("lines", [])],
+        )
+        if include_sensitive
+        else []
+    )
     journal_entries = snapshot.get("journal_entries", []) if include_sensitive else []
     courses = snapshot.get("courses", [])
 
@@ -190,7 +229,10 @@ def conversation_attributes(
 
     if include_sensitive:
         attrs["odoo_orders_count"] = len(orders)
+        attrs["odoo_quotations_count"] = len(quotations)
+        attrs["odoo_sales_orders_count"] = len(sales_orders)
         attrs["odoo_invoices_count"] = len(invoices)
+        attrs["odoo_invoiced_items_count"] = len(invoiced_items)
         attrs["odoo_journal_entries_count"] = len(journal_entries)
 
     if partner:

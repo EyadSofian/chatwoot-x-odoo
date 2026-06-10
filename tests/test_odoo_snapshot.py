@@ -144,8 +144,37 @@ class FakeOdoo(OdooClient):
                 ]
             return []
 
-        # crm.lead, sale.order.line, account.move.line, slide.channel.partner,
-        # event.registration -> no extra rows for these tests.
+        if model == "sale.order.line" and _has_leaf(domain, "order_id", "in", [555]):
+            return [
+                {
+                    "id": 556,
+                    "order_id": [555, "S14794"],
+                    "product_id": [109, "PMP Course"],
+                    "name": "PMP Course",
+                    "product_uom_qty": 1,
+                    "qty_delivered": 1,
+                    "qty_invoiced": 1,
+                    "price_unit": 18000,
+                    "price_subtotal": 18000,
+                    "price_total": 18000,
+                }
+            ]
+
+        if model == "account.move.line" and _has_leaf(domain, "move_id", "in", [999]):
+            return [
+                {
+                    "id": 1000,
+                    "move_id": [999, "INV/2026/0001"],
+                    "product_id": [109, "PMP Course"],
+                    "name": "PMP Course",
+                    "quantity": 1,
+                    "price_unit": 18000,
+                    "price_subtotal": 18000,
+                    "price_total": 18000,
+                }
+            ]
+
+        # crm.lead, slide.channel.partner, event.registration -> no extra rows.
         return []
 
 
@@ -188,6 +217,14 @@ class JournalEntryOdoo(FakeOdoo):
         return super().search_read(model, domain, fields, limit=limit, order=order)
 
 
+class MixedOrdersOdoo(FakeOdoo):
+    def get_sale_orders(self, *, partner_ids):  # noqa: ANN001
+        return [
+            {"id": 100, "name": "Q0100", "state": "sent", "lines": []},
+            {"id": 101, "name": "S0101", "state": "sale", "lines": []},
+        ], None
+
+
 def _settings() -> Settings:
     return Settings.from_env()
 
@@ -224,10 +261,24 @@ def test_sales_orders_found_through_commercial_partner():
 
     # The order is booked on the commercial parent (7) yet is still returned.
     assert [order["name"] for order in snapshot["orders"]] == ["S14794"]
+    assert snapshot["quotations"] == []
+    assert [order["name"] for order in snapshot["sales_orders"]] == ["S14794"]
+    assert snapshot["sales_orders"][0]["lines"][0]["qty_invoiced"] == 1
 
     sale_domains = [domain for model, domain in client.calls if model == "sale.order"]
     assert sale_domains, "sale.order was never queried"
     assert all(COMMERCIAL_ID in _child_of_targets(domain) for domain in sale_domains)
+
+
+def test_snapshot_splits_quotations_from_confirmed_sales_orders():
+    client = MixedOrdersOdoo(_settings(), CHILD_PARTNER)
+
+    snapshot = client.customer_snapshot(email="hussein@example.com", phone=None)
+
+    assert [order["name"] for order in snapshot["quotations"]] == ["Q0100"]
+    assert [order["name"] for order in snapshot["sales_orders"]] == ["S0101"]
+    assert snapshot["debug"]["counts"]["quotations"] == 1
+    assert snapshot["debug"]["counts"]["sales_orders"] == 1
 
 
 def test_invoices_found_through_commercial_partner():
@@ -242,6 +293,8 @@ def test_invoices_found_through_commercial_partner():
 
     assert [invoice["name"] for invoice in snapshot["invoices"]] == ["INV/2026/0001"]
     assert snapshot["invoices"][0]["payment_state"] == "paid"
+    assert snapshot["invoiced_items"][0]["invoice_name"] == "INV/2026/0001"
+    assert snapshot["invoiced_items"][0]["product_id"] == [109, "PMP Course"]
 
     move_domains = [domain for model, domain in client.calls if model == "account.move"]
     assert move_domains, "account.move was never queried"
@@ -289,6 +342,9 @@ def test_orders_and_invoices_empty_when_restricted_but_courses_still_resolve():
 
     # The sensitive sections expose no order/invoice records to a normal agent.
     assert snapshot["orders"] == []
+    assert snapshot["quotations"] == []
+    assert snapshot["sales_orders"] == []
     assert snapshot["invoices"] == []
+    assert snapshot["invoiced_items"] == []
     assert snapshot["debug"]["orders_included"] is False
     assert snapshot["debug"]["invoices_included"] is False
