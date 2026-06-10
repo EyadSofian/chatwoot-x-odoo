@@ -23,14 +23,18 @@
     metricLeads: document.getElementById("metricLeads"),
     metricOrders: document.getElementById("metricOrders"),
     metricInvoices: document.getElementById("metricInvoices"),
+    metricJournalEntries: document.getElementById("metricJournalEntries"),
     metricCourses: document.getElementById("metricCourses"),
     matchesPanel: document.getElementById("matchesPanel"),
     matchesCount: document.getElementById("matchesCount"),
     matchesList: document.getElementById("matchesList"),
     contactDetails: document.getElementById("contactDetails"),
+    relatedContactsCount: document.getElementById("relatedContactsCount"),
+    relatedContactsList: document.getElementById("relatedContactsList"),
     leadsList: document.getElementById("leadsList"),
     ordersList: document.getElementById("ordersList"),
     invoicesList: document.getElementById("invoicesList"),
+    journalEntriesList: document.getElementById("journalEntriesList"),
     coursesList: document.getElementById("coursesList"),
     emptyTemplate: document.getElementById("emptyTemplate"),
   };
@@ -135,15 +139,6 @@
     return els.emptyTemplate.content.firstElementChild.cloneNode(true);
   }
 
-  function restrictedNode(sectionName) {
-    const node = emptyNode();
-    const agentEmail = state.snapshot?.agent?.email || state.lastLookup.agentEmail || "";
-    node.querySelector("p").textContent = agentEmail
-      ? `${sectionName} are locked for ${agentEmail}. Add this email to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS.`
-      : `${sectionName} are locked because Chatwoot did not send the current agent email.`;
-    return node;
-  }
-
   function detail(label, value) {
     const wrap = document.createElement("div");
     const dt = document.createElement("dt");
@@ -172,6 +167,34 @@
       detail("City", partner.city),
       detail("Country", partner.country_id)
     );
+  }
+
+  function renderRelatedContacts(contacts) {
+    const relatedContacts = Array.isArray(contacts) ? contacts : [];
+    els.relatedContactsCount.textContent = String(relatedContacts.length);
+    clearNode(els.relatedContactsList);
+    if (relatedContacts.length === 0) {
+      els.relatedContactsList.appendChild(emptyNode());
+      return;
+    }
+
+    relatedContacts.forEach((contact) => {
+      const item = document.createElement("article");
+      item.className = "record-item";
+      item.innerHTML = `
+        <p class="record-title"></p>
+        <p class="record-meta"></p>
+      `;
+      item.querySelector(".record-title").textContent = valueOrDash(contact.name);
+      item.querySelector(".record-meta").textContent = [
+        `ID: ${valueOrDash(contact.id)}`,
+        `Type: ${valueOrDash(contact.type)}`,
+        `Email: ${valueOrDash(contact.email)}`,
+        `Phone: ${valueOrDash(contact.phone || contact.mobile)}`,
+        `Parent: ${valueOrDash(contact.parent_id)}`,
+      ].join(" | ");
+      els.relatedContactsList.appendChild(item);
+    });
   }
 
   function renderMatches(matches) {
@@ -227,12 +250,8 @@
     });
   }
 
-  function renderOrders(orders, restricted) {
+  function renderOrders(orders) {
     clearNode(els.ordersList);
-    if (restricted) {
-      els.ordersList.appendChild(restrictedNode("Sales orders"));
-      return;
-    }
     if (!orders || orders.length === 0) {
       els.ordersList.appendChild(emptyNode());
       return;
@@ -267,12 +286,8 @@
     });
   }
 
-  function renderInvoices(invoices, restricted) {
+  function renderInvoices(invoices) {
     clearNode(els.invoicesList);
-    if (restricted) {
-      els.invoicesList.appendChild(restrictedNode("Invoices"));
-      return;
-    }
     if (!invoices || invoices.length === 0) {
       els.invoicesList.appendChild(emptyNode());
       return;
@@ -305,6 +320,46 @@
       });
 
       els.invoicesList.appendChild(item);
+    });
+  }
+
+  function renderJournalEntries(entries) {
+    clearNode(els.journalEntriesList);
+    if (!entries || entries.length === 0) {
+      els.journalEntriesList.appendChild(emptyNode());
+      return;
+    }
+
+    entries.forEach((entry) => {
+      const item = document.createElement("article");
+      item.className = "record-item";
+      item.innerHTML = `
+        <p class="record-title"></p>
+        <p class="record-meta"></p>
+      `;
+      item.querySelector(".record-title").textContent = valueOrDash(entry.name);
+      item.querySelector(".record-meta").textContent = [
+        `Date: ${valueOrDash(entry.date)}`,
+        `Journal: ${valueOrDash(entry.journal_id)}`,
+        `State: ${valueOrDash(entry.state)}`,
+        `Reference: ${valueOrDash(entry.ref)}`,
+        `Debit: ${money(entry.partner_debit, entry.currency_id)}`,
+        `Credit: ${money(entry.partner_credit, entry.currency_id)}`,
+      ].join(" | ");
+
+      (entry.lines || []).slice(0, 6).forEach((line) => {
+        const lineItem = document.createElement("p");
+        lineItem.className = "line-item";
+        lineItem.textContent = [
+          valueOrDash(line.account_id),
+          valueOrDash(line.name || line.ref),
+          `Debit ${money(line.debit, line.currency_id || entry.currency_id)}`,
+          `Credit ${money(line.credit, line.currency_id || entry.currency_id)}`,
+        ].join(" | ");
+        item.appendChild(lineItem);
+      });
+
+      els.journalEntriesList.appendChild(item);
     });
   }
 
@@ -388,37 +443,12 @@
     return item;
   }
 
-  function renderDiagnostics(snapshot, restrictedSections) {
+  function renderDiagnostics(snapshot) {
     clearNode(els.diagnosticsList);
     const entries = [];
     const partner = snapshot.partner || null;
     const warnings = snapshot.warnings || [];
     const debug = snapshot.debug || {};
-    const agentEmail = snapshot.agent?.email || state.lastLookup.agentEmail || "";
-
-    if (restrictedSections.length > 0) {
-      if (agentEmail) {
-        entries.push(
-          diagnosticEntry(
-            `Sensitive sections locked for ${agentEmail}`,
-            `Add ${agentEmail} to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS (sections: ${restrictedSections.join(
-              ", "
-            )}).`,
-            "warning"
-          )
-        );
-      } else {
-        entries.push(
-          diagnosticEntry(
-            "Chatwoot did not send the current agent email",
-            `Sensitive sections (${restrictedSections.join(
-              ", "
-            )}) stay locked until Chatwoot provides currentAgent.email. Open the app from inside a conversation as a signed-in agent.`,
-            "warning"
-          )
-        );
-      }
-    }
 
     if (partner && debug.scope_partner_ids) {
       const scope = Array.isArray(debug.scope_partner_ids)
@@ -431,7 +461,7 @@
       entries.push(
         diagnosticEntry(
           `Matched Odoo partner ${debug.partner_id ?? valueOrDash(partner.id)}`,
-          `Searched orders/invoices against partner ids: ${scope}${commercial}.`,
+          `Searched contacts, CRM, orders, invoices, journal entries, and courses against partner ids: ${scope}${commercial}.`,
           "muted"
         )
       );
@@ -449,40 +479,33 @@
   function renderSnapshot(snapshot) {
     state.snapshot = snapshot;
     const partner = snapshot.partner || null;
+    const relatedContacts = snapshot.related_contacts || [];
     const leads = snapshot.leads || [];
     const orders = snapshot.orders || [];
     const invoices = snapshot.invoices || [];
+    const journalEntries = snapshot.journal_entries || [];
     const courses = snapshot.courses || [];
     const warnings = snapshot.warnings || [];
-    const restrictedSections = snapshot.restricted_sections || [];
 
     els.metricContact.textContent = partner ? valueOrDash(partner.name) : "-";
     els.metricLeads.textContent = String(leads.length);
-    els.metricOrders.textContent = restrictedSections.includes("orders") ? "Locked" : String(orders.length);
-    els.metricInvoices.textContent = restrictedSections.includes("invoices")
-      ? "Locked"
-      : String(invoices.length);
+    els.metricOrders.textContent = String(orders.length);
+    els.metricInvoices.textContent = String(invoices.length);
+    els.metricJournalEntries.textContent = String(journalEntries.length);
     els.metricCourses.textContent = String(courses.length);
     els.noteButton.disabled = !state.lastLookup.conversationId;
 
     renderMatches(snapshot.matches || []);
     renderContact(partner);
+    renderRelatedContacts(relatedContacts);
     renderLeads(leads);
-    renderOrders(orders, restrictedSections.includes("orders"));
-    renderInvoices(invoices, restrictedSections.includes("invoices"));
+    renderOrders(orders);
+    renderInvoices(invoices);
+    renderJournalEntries(journalEntries);
     renderCourses(courses);
-    renderDiagnostics(snapshot, restrictedSections);
+    renderDiagnostics(snapshot);
 
-    if (partner && restrictedSections.length > 0) {
-      const agentEmail = snapshot.agent?.email || state.lastLookup.agentEmail || "";
-      const agentHint = agentEmail
-        ? ` Add ${agentEmail} to SENSITIVE_DATA_ALLOWED_AGENT_EMAILS.`
-        : " Chatwoot did not send the current agent email.";
-      setStatus(
-        "warning",
-        `Matched ${valueOrDash(partner.name)}. Sensitive sections are locked.${agentHint}`
-      );
-    } else if (partner && warnings.length > 0) {
+    if (partner && warnings.length > 0) {
       setStatus("warning", `Matched ${valueOrDash(partner.name)}. Some optional Odoo data is unavailable.`);
     } else if (partner) {
       setStatus("success", `Matched ${valueOrDash(partner.name)} in Odoo.`);
@@ -543,8 +566,12 @@
       .join(" | ");
     els.contextLine.textContent = label || "No contact details found in Chatwoot context.";
 
-    if (lookup.email || lookup.phone) {
-      loadSnapshot({ email: lookup.email, phone: lookup.phone });
+    if (lookup.contactName || lookup.email || lookup.phone) {
+      loadSnapshot({
+        query: lookup.contactName,
+        email: lookup.email,
+        phone: lookup.phone,
+      });
     }
   }
 

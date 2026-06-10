@@ -246,7 +246,7 @@ input:focus {
 
 .metrics {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
 }
 
@@ -278,6 +278,13 @@ input:focus {
   align-items: center;
   justify-content: space-between;
   margin-bottom: 10px;
+}
+
+.subsection-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 16px 0 8px;
 }
 
 .badge {
@@ -388,6 +395,12 @@ input:focus {
 
 .is-hidden {
   display: none !important;
+}
+
+@media (max-width: 860px) {
+  .metrics {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 @media (max-width: 640px) {

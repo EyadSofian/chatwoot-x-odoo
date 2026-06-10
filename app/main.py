@@ -137,9 +137,11 @@ async def dashboard_search(
         return {
             "partner": None,
             "matches": [],
+            "related_contacts": [],
             "leads": [],
             "orders": [],
             "invoices": [],
+            "journal_entries": [],
             "courses": [],
             "warnings": [],
             "restricted_sections": restricted_sections,

@@ -36,7 +36,7 @@ async def process_chatwoot_webhook(
 
     chatwoot = ChatwootClient(settings)
 
-    if not context.email and not context.phone:
+    if not context.email and not context.phone and not context.contact_name:
         if settings.chatwoot_auto_private_notes:
             note = format_customer_note({}, lookup_email=context.email, lookup_phone=context.phone)
             await chatwoot.create_private_note(
@@ -55,8 +55,10 @@ async def process_chatwoot_webhook(
         OdooClient(settings).customer_snapshot,
         email=context.email,
         phone=context.phone,
+        query=context.contact_name,
         include_orders=settings.chatwoot_update_sensitive_attributes,
         include_invoices=settings.chatwoot_update_sensitive_attributes,
+        include_journal_entries=settings.chatwoot_update_sensitive_attributes,
     )
 
     note_created = False

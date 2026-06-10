@@ -44,21 +44,23 @@ def test_dashboard_search_returns_empty_payload_without_lookup(monkeypatch):
     assert response.json() == {
         "partner": None,
         "matches": [],
+        "related_contacts": [],
         "leads": [],
         "orders": [],
         "invoices": [],
+        "journal_entries": [],
         "courses": [],
         "warnings": [],
-        "restricted_sections": ["invoices", "orders"],
+        "restricted_sections": [],
         "agent": {"email": "", "id": "", "name": ""},
         "debug": {
             "agent_email_present": False,
-            "restricted_sections": ["invoices", "orders"],
+            "restricted_sections": [],
         },
     }
 
 
-def test_dashboard_search_locks_sections_when_current_agent_missing(monkeypatch):
+def test_dashboard_search_keeps_all_sections_open_when_current_agent_missing(monkeypatch):
     monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
     monkeypatch.setenv("SENSITIVE_DATA_ALLOWED_AGENT_EMAILS", "manager@example.com")
     get_settings.cache_clear()
@@ -68,7 +70,7 @@ def test_dashboard_search_locks_sections_when_current_agent_missing(monkeypatch)
     body = response.json()
 
     assert response.status_code == 200
-    assert body["restricted_sections"] == ["invoices", "orders"]
+    assert body["restricted_sections"] == []
     assert body["agent"]["email"] == ""
     assert body["debug"]["agent_email_present"] is False
 
@@ -86,7 +88,7 @@ def test_dashboard_search_allows_sensitive_sections_for_allowed_agent(monkeypatc
     assert response.json()["restricted_sections"] == []
 
 
-def test_dashboard_search_allows_sensitive_sections_for_configured_engosoft_agents(
+def test_dashboard_search_keeps_all_sections_open_for_every_agent(
     monkeypatch,
 ):
     monkeypatch.delenv("DASHBOARD_APP_TOKEN", raising=False)
@@ -103,6 +105,5 @@ def test_dashboard_search_allows_sensitive_sections_for_configured_engosoft_agen
         "/api/dashboard/search?agent_email=someone.else@engosoft.com"
     )
 
-    # Allow-list match is case-insensitive.
     assert allowed.json()["restricted_sections"] == []
-    assert blocked.json()["restricted_sections"] == ["invoices", "orders"]
+    assert blocked.json()["restricted_sections"] == []

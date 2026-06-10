@@ -25,9 +25,11 @@ def _money(value: Any, currency: Any = None) -> str:
 
 def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, lookup_phone: str | None) -> str:
     partner = snapshot.get("partner")
+    related_contacts = snapshot.get("related_contacts", [])
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", [])
     invoices = snapshot.get("invoices", [])
+    journal_entries = snapshot.get("journal_entries", [])
     courses = snapshot.get("courses", [])
     warnings = snapshot.get("warnings", [])
     restricted_sections = snapshot.get("restricted_sections", [])
@@ -57,6 +59,15 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
             f"Company: {partner.get('company_name') or _name(partner.get('commercial_partner_id'))}",
         ]
     )
+
+    lines.append("")
+    lines.append(f"Related contacts: {len(related_contacts)}")
+    for contact in related_contacts[:5]:
+        lines.append(
+            f"- #{contact.get('id')} {contact.get('name') or '-'} | "
+            f"{contact.get('email') or '-'} | "
+            f"{contact.get('phone') or contact.get('mobile') or '-'}"
+        )
 
     lines.append("")
     lines.append(f"CRM leads/opportunities: {len(leads)}")
@@ -109,6 +120,17 @@ def format_customer_note(snapshot: dict[str, Any], *, lookup_email: str | None, 
                 lines.append(f"  * {product} x {qty}: {subtotal}")
 
     lines.append("")
+    lines.append(f"Journal entries: {len(journal_entries)}")
+    for entry in journal_entries[:5]:
+        debit = _money(entry.get("partner_debit"), entry.get("currency_id"))
+        credit = _money(entry.get("partner_credit"), entry.get("currency_id"))
+        lines.append(
+            f"- {entry.get('name') or '-'} | {entry.get('date') or '-'} | "
+            f"{_name(entry.get('journal_id'))} | {entry.get('state') or '-'} | "
+            f"debit: {debit} | credit: {credit}"
+        )
+
+    lines.append("")
     lines.append(f"Courses: {len(courses)}")
     if courses:
         for course in courses[:5]:
@@ -152,13 +174,16 @@ def conversation_attributes(
     include_sensitive: bool = True,
 ) -> dict[str, Any]:
     partner = snapshot.get("partner")
+    related_contacts = snapshot.get("related_contacts", [])
     leads = snapshot.get("leads", [])
     orders = snapshot.get("orders", []) if include_sensitive else []
     invoices = snapshot.get("invoices", []) if include_sensitive else []
+    journal_entries = snapshot.get("journal_entries", []) if include_sensitive else []
     courses = snapshot.get("courses", [])
 
     attrs: dict[str, Any] = {
         "odoo_match_found": bool(partner),
+        "odoo_related_contacts_count": len(related_contacts),
         "odoo_leads_count": len(leads),
         "odoo_courses_count": len(courses),
     }
@@ -166,6 +191,7 @@ def conversation_attributes(
     if include_sensitive:
         attrs["odoo_orders_count"] = len(orders)
         attrs["odoo_invoices_count"] = len(invoices)
+        attrs["odoo_journal_entries_count"] = len(journal_entries)
 
     if partner:
         attrs["odoo_partner_id"] = str(partner.get("id"))
@@ -185,6 +211,11 @@ def conversation_attributes(
         attrs["odoo_last_invoice_payment_state"] = invoices[0].get("payment_state") or ""
         attrs["odoo_last_invoice_due"] = str(invoices[0].get("amount_residual") or 0)
         attrs["odoo_last_invoice_salesperson"] = _name(invoices[0].get("invoice_user_id"))
+
+    if journal_entries:
+        attrs["odoo_last_journal_entry"] = journal_entries[0].get("name") or ""
+        attrs["odoo_last_journal_entry_date"] = journal_entries[0].get("date") or ""
+        attrs["odoo_last_journal"] = _name(journal_entries[0].get("journal_id"))
 
     if courses:
         attrs["odoo_last_course"] = _name(courses[0].get("channel_id"))

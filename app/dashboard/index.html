@@ -72,6 +72,10 @@
           <strong id="metricInvoices">0</strong>
         </article>
         <article class="metric">
+          <span class="metric-label">Journal Entries</span>
+          <strong id="metricJournalEntries">0</strong>
+        </article>
+        <article class="metric">
           <span class="metric-label">Courses</span>
           <strong id="metricCourses">0</strong>
         </article>
@@ -91,11 +95,17 @@
           <button class="tab" type="button" data-tab="crm">CRM</button>
           <button class="tab" type="button" data-tab="orders">Orders</button>
           <button class="tab" type="button" data-tab="invoices">Invoices</button>
+          <button class="tab" type="button" data-tab="journal">Journal Entries</button>
           <button class="tab" type="button" data-tab="courses">Courses</button>
         </div>
 
         <article id="tab-contact" class="tab-panel">
           <dl id="contactDetails" class="details-list"></dl>
+          <div class="subsection-header">
+            <h2>Related Contacts</h2>
+            <span id="relatedContactsCount" class="badge">0</span>
+          </div>
+          <div id="relatedContactsList" class="record-list"></div>
         </article>
 
         <article id="tab-crm" class="tab-panel is-hidden">
@@ -108,6 +118,10 @@
 
         <article id="tab-invoices" class="tab-panel is-hidden">
           <div id="invoicesList" class="record-list"></div>
+        </article>
+
+        <article id="tab-journal" class="tab-panel is-hidden">
+          <div id="journalEntriesList" class="record-list"></div>
         </article>
 
         <article id="tab-courses" class="tab-panel is-hidden">

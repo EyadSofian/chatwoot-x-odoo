@@ -30,7 +30,7 @@ def _or_domain(clauses: list[list[Any]]) -> list[Any]:
     if not clauses:
         return []
     if len(clauses) == 1:
-        return clauses[0]
+        return [clauses[0]]
     return ["|"] * (len(clauses) - 1) + clauses
 
 
@@ -42,6 +42,9 @@ PARTNER_BASE_FIELDS = [
     "mobile",
     "company_name",
     "commercial_partner_id",
+    "parent_id",
+    "type",
+    "is_company",
     "vat",
     "city",
     "country_id",
@@ -73,6 +76,15 @@ def _phone_tokens(value: str | None) -> list[str]:
             tokens.add(normalized[-length:])
 
     return sorted((token for token in tokens if len(token) >= 7), key=len, reverse=True)
+
+
+def _phone_search_fragments(value: str | None) -> list[str]:
+    digits = _digits(value)
+    fragments = set(_phone_tokens(value))
+    for length in (7, 6, 5, 4):
+        if len(digits) >= length:
+            fragments.add(digits[-length:])
+    return sorted(fragments, key=len, reverse=True)
 
 
 def _phone_match_score(lookup_values: list[str], partner_values: list[str]) -> int:
@@ -260,6 +272,34 @@ class OdooClient:
             fault_summary = fault_lines[-1] if fault_lines else str(exc)
             return [], f"{model}: {fault_summary}"
 
+    def available_fields(self, model: str, desired_fields: list[str]) -> list[str]:
+        available = self.model_fields(model)
+        if not available:
+            return desired_fields
+        return [field for field in desired_fields if field in available]
+
+    def partner_link_domain(
+        self,
+        model: str,
+        partner_ids: list[int],
+        *,
+        candidate_fields: tuple[str, ...] = ("partner_id",),
+    ) -> list[Any]:
+        if not partner_ids:
+            return []
+
+        available = self.model_fields(model)
+        clauses: list[list[Any]] = []
+        for index, field in enumerate(candidate_fields):
+            if available and field not in available:
+                continue
+            if not available and index > 0:
+                continue
+            operator = "in" if field == "commercial_partner_id" else "child_of"
+            clauses.append([field, operator, partner_ids])
+
+        return _or_domain(clauses) if clauses else [["id", "=", 0]]
+
     def read_records(
         self,
         model: str,
@@ -284,16 +324,18 @@ class OdooClient:
             if not _digits(query):
                 clauses.append(["name", "ilike", query])
                 clauses.append(["email", "ilike", query])
+            elif query.isdigit() and len(query) <= 9:
+                clauses.append(["id", "=", int(query)])
 
-            for phone_token in _phone_tokens(query)[:4]:
+            for phone_token in _phone_search_fragments(query)[:6]:
                 for field in ["phone", "mobile", "phone_sanitized"]:
                     if field in self.partner_fields:
                         clauses.append([field, "ilike", phone_token])
 
         if email:
-            clauses.append(["email", "=ilike", email])
+            clauses.append(["email", "ilike", email.strip()])
 
-        for phone_token in _phone_tokens(phone)[:4]:
+        for phone_token in _phone_search_fragments(phone)[:6]:
             for field in ["phone", "mobile", "phone_sanitized"]:
                 if field in self.partner_fields:
                     clauses.append([field, "ilike", phone_token])
@@ -357,7 +399,7 @@ class OdooClient:
             "res.partner",
             domain,
             self.partner_fields,
-            limit=max(limit, 25),
+            limit=max(limit, 100),
             order="write_date desc",
         )
         partners.sort(
@@ -379,29 +421,44 @@ class OdooClient:
         partners = self.read_records("res.partner", [partner_id], self.partner_fields)
         return partners[0] if partners else None
 
+    def get_related_contacts(
+        self, *, partner_ids: list[int]
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        if not partner_ids:
+            return [], None
+
+        contacts, warning = self.optional_search_read(
+            "res.partner",
+            [["id", "child_of", partner_ids]],
+            self.partner_fields,
+            limit=25,
+            order="name asc, id asc",
+        )
+        return contacts, warning
+
     def get_leads(
         self,
         *,
         partner_ids: list[int],
         email: str | None,
         phone: str | None,
-    ) -> list[dict[str, Any]]:
+    ) -> tuple[list[dict[str, Any]], str | None]:
         clauses: list[list[Any]] = []
         if partner_ids:
-            clauses.append(["partner_id", "in", partner_ids])
+            clauses.append(["partner_id", "child_of", partner_ids])
         if email:
-            clauses.append(["email_from", "=ilike", email])
+            clauses.append(["email_from", "ilike", email.strip()])
 
         phone_digits = _digits(phone)
         if phone_digits:
-            for phone_token in _phone_tokens(phone)[:3]:
+            for phone_token in _phone_search_fragments(phone)[:6]:
                 clauses.append(["phone", "ilike", phone_token])
                 clauses.append(["mobile", "ilike", phone_token])
 
         if not clauses:
-            return []
+            return [], None
 
-        return self.search_read(
+        return self.optional_search_read(
             "crm.lead",
             _or_domain(clauses),
             [
@@ -429,9 +486,19 @@ class OdooClient:
         if not partner_ids:
             return [], None
 
+        partner_domain = self.partner_link_domain(
+            "sale.order",
+            partner_ids,
+            candidate_fields=(
+                "partner_id",
+                "commercial_partner_id",
+                "partner_invoice_id",
+                "partner_shipping_id",
+            ),
+        )
         orders, warning = self.optional_search_read(
             "sale.order",
-            [["partner_id", "child_of", partner_ids]],
+            partner_domain,
             [
                 "id",
                 "name",
@@ -479,12 +546,14 @@ class OdooClient:
         if not partner_ids:
             return [], None
 
+        partner_domain = self.partner_link_domain(
+            "account.move",
+            partner_ids,
+            candidate_fields=("partner_id", "commercial_partner_id"),
+        )
         invoices, warning = self.optional_search_read(
             "account.move",
-            [
-                ["partner_id", "child_of", partner_ids],
-                ["move_type", "in", ["out_invoice", "out_refund"]],
-            ],
+            partner_domain + [["move_type", "in", ["out_invoice", "out_refund"]]],
             [
                 "id",
                 "name",
@@ -534,6 +603,92 @@ class OdooClient:
 
         return invoices, lines_warning
 
+    def get_journal_entries(
+        self, *, partner_ids: list[int]
+    ) -> tuple[list[dict[str, Any]], str | None]:
+        if not partner_ids:
+            return [], None
+
+        line_fields = self.available_fields(
+            "account.move.line",
+            [
+                "id",
+                "move_id",
+                "date",
+                "name",
+                "ref",
+                "partner_id",
+                "account_id",
+                "debit",
+                "credit",
+                "balance",
+                "currency_id",
+                "amount_currency",
+                "reconciled",
+            ],
+        )
+        partner_lines, lines_warning = self.optional_search_read(
+            "account.move.line",
+            self.partner_link_domain("account.move.line", partner_ids)
+            + [["move_id.move_type", "=", "entry"]],
+            line_fields,
+            limit=max(self.settings.max_journal_entries * 20, 100),
+            order="date desc, id desc",
+        )
+        if lines_warning or not partner_lines:
+            return [], lines_warning
+
+        move_ids: list[int] = []
+        for line in partner_lines:
+            move_id = _relation_id(line.get("move_id"))
+            if move_id and move_id not in move_ids:
+                move_ids.append(move_id)
+            if len(move_ids) >= self.settings.max_journal_entries:
+                break
+
+        move_fields = self.available_fields(
+            "account.move",
+            [
+                "id",
+                "name",
+                "ref",
+                "date",
+                "state",
+                "move_type",
+                "journal_id",
+                "company_id",
+                "partner_id",
+                "commercial_partner_id",
+                "currency_id",
+            ],
+        )
+        entries, entries_warning = self.optional_search_read(
+            "account.move",
+            [["id", "in", move_ids], ["move_type", "=", "entry"]],
+            move_fields,
+            limit=self.settings.max_journal_entries,
+            order="date desc, id desc",
+        )
+        if entries_warning:
+            return [], entries_warning
+
+        lines_by_move: dict[int, list[dict[str, Any]]] = {}
+        for line in partner_lines:
+            move_id = _relation_id(line.get("move_id"))
+            if move_id in move_ids:
+                lines_by_move.setdefault(int(move_id), []).append(line)
+
+        for entry in entries:
+            entry_lines = lines_by_move.get(int(entry["id"]), [])
+            entry["lines"] = entry_lines
+            entry["partner_debit"] = sum(float(line.get("debit") or 0) for line in entry_lines)
+            entry["partner_credit"] = sum(float(line.get("credit") or 0) for line in entry_lines)
+            entry["partner_balance"] = sum(
+                float(line.get("balance") or 0) for line in entry_lines
+            )
+
+        return entries, None
+
     def get_courses(
         self, *, partner_ids: list[int]
     ) -> tuple[list[dict[str, Any]], str | None]:
@@ -545,7 +700,7 @@ class OdooClient:
 
         elearning_courses, warning = self.optional_search_read(
             "slide.channel.partner",
-            [["partner_id", "in", partner_ids]],
+            [["partner_id", "child_of", partner_ids]],
             [
                 "id",
                 "channel_id",
@@ -629,7 +784,7 @@ class OdooClient:
         ]
         registrations, warning = self.optional_search_read(
             "event.registration",
-            [["partner_id", "child_of", partner_ids]],
+            self.partner_link_domain("event.registration", partner_ids),
             desired_fields,
             limit=self.settings.max_courses,
             order="create_date desc",
@@ -671,7 +826,16 @@ class OdooClient:
 
         orders, orders_warning = self.optional_search_read(
             "sale.order",
-            [["partner_id", "child_of", partner_ids]],
+            self.partner_link_domain(
+                "sale.order",
+                partner_ids,
+                candidate_fields=(
+                    "partner_id",
+                    "commercial_partner_id",
+                    "partner_invoice_id",
+                    "partner_shipping_id",
+                ),
+            ),
             ["id", "name", "state", "date_order", "user_id"],
             limit=max(self.settings.max_courses * 4, 20),
             order="date_order desc",
@@ -765,10 +929,12 @@ class OdooClient:
 
         moves, moves_warning = self.optional_search_read(
             "account.move",
-            [
-                ["partner_id", "child_of", partner_ids],
-                ["move_type", "in", ["out_invoice", "out_refund"]],
-            ],
+            self.partner_link_domain(
+                "account.move",
+                partner_ids,
+                candidate_fields=("partner_id", "commercial_partner_id"),
+            )
+            + [["move_type", "in", ["out_invoice", "out_refund"]]],
             ["id", "name", "state", "payment_state", "invoice_date", "invoice_user_id"],
             limit=max(self.settings.max_courses * 4, 20),
             order="invoice_date desc, id desc",
@@ -852,6 +1018,7 @@ class OdooClient:
         partner_id: int | None = None,
         include_orders: bool = True,
         include_invoices: bool = True,
+        include_journal_entries: bool = True,
     ) -> dict[str, Any]:
         if partner_id:
             partner = self.get_partner(partner_id)
@@ -869,7 +1036,8 @@ class OdooClient:
 
         lookup_email = email or (partner or {}).get("email")
         lookup_phone = phone or (partner or {}).get("phone") or (partner or {}).get("mobile")
-        leads = self.get_leads(
+        related_contacts, contacts_warning = self.get_related_contacts(partner_ids=scope_ids)
+        leads, leads_warning = self.get_leads(
             partner_ids=scope_ids, email=lookup_email, phone=lookup_phone
         )
         orders, orders_warning = (
@@ -878,22 +1046,37 @@ class OdooClient:
         invoices, invoices_warning = (
             self.get_invoices(partner_ids=scope_ids) if include_invoices else ([], None)
         )
+        journal_entries, journal_entries_warning = (
+            self.get_journal_entries(partner_ids=scope_ids)
+            if include_journal_entries
+            else ([], None)
+        )
         courses, courses_warning = self.get_courses(partner_ids=scope_ids)
         warnings = [
             warning
-            for warning in [orders_warning, invoices_warning, courses_warning]
+            for warning in [
+                contacts_warning,
+                leads_warning,
+                orders_warning,
+                invoices_warning,
+                journal_entries_warning,
+                courses_warning,
+            ]
             if warning
         ]
 
         logger.info(
             "Odoo snapshot loaded partner=%s commercial=%s scope=%s "
-            "leads=%s orders=%s invoices=%s courses=%s warnings=%s",
+            "contacts=%s leads=%s orders=%s invoices=%s journal_entries=%s "
+            "courses=%s warnings=%s",
             partner_id,
             commercial_id,
             scope_ids,
+            len(related_contacts),
             len(leads),
             len(orders),
             len(invoices),
+            len(journal_entries),
             len(courses),
             len(warnings),
         )
@@ -903,20 +1086,25 @@ class OdooClient:
             "scope_partner_ids": scope_ids,
             "orders_included": include_orders,
             "invoices_included": include_invoices,
+            "journal_entries_included": include_journal_entries,
             "counts": {
                 "matches": len(matches),
+                "related_contacts": len(related_contacts),
                 "leads": len(leads),
                 "orders": len(orders),
                 "invoices": len(invoices),
+                "journal_entries": len(journal_entries),
                 "courses": len(courses),
             },
         }
         return {
             "partner": partner,
             "matches": matches,
+            "related_contacts": related_contacts,
             "leads": leads,
             "orders": orders,
             "invoices": invoices,
+            "journal_entries": journal_entries,
             "courses": courses,
             "warnings": warnings,
             "debug": debug,

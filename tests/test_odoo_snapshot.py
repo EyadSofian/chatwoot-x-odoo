@@ -37,7 +37,20 @@ _MODEL_FIELDS = {
     "res.partner": ["phone_sanitized"],
     "event.registration": ["id", "partner_id", "event_id", "name", "state"],
     "sale.order.line": ["id", "order_id", "product_id", "name", "display_type", "event_id"],
-    "account.move.line": ["id", "move_id", "product_id", "name", "display_type"],
+    "account.move.line": [
+        "id",
+        "move_id",
+        "product_id",
+        "name",
+        "display_type",
+        "date",
+        "partner_id",
+        "account_id",
+        "debit",
+        "credit",
+        "balance",
+        "currency_id",
+    ],
 }
 
 
@@ -53,6 +66,17 @@ def _child_of_targets(domain: list[Any], field: str = "partner_id") -> list[int]
             ids = clause[2]
             return [ids] if isinstance(ids, int) else list(ids)
     return []
+
+
+def _has_leaf(domain: list[Any], field: str, operator: str, value: Any) -> bool:
+    return any(
+        isinstance(clause, (list, tuple))
+        and len(clause) == 3
+        and clause[0] == field
+        and clause[1] == operator
+        and clause[2] == value
+        for clause in domain
+    )
 
 
 class FakeOdoo(OdooClient):
@@ -125,6 +149,45 @@ class FakeOdoo(OdooClient):
         return []
 
 
+class JournalEntryOdoo(FakeOdoo):
+    def search_read(self, model, domain, fields, *, limit, order=None):  # noqa: ANN001
+        if model == "account.move.line" and _has_leaf(
+            domain, "move_id.move_type", "=", "entry"
+        ):
+            self.calls.append((model, domain))
+            return [
+                {
+                    "id": 801,
+                    "move_id": [777, "MISC/2026/0042"],
+                    "date": "2026-02-01",
+                    "name": "Customer adjustment",
+                    "partner_id": [COMMERCIAL_ID, "Engosoft Company"],
+                    "account_id": [1210, "Accounts Receivable"],
+                    "debit": 250,
+                    "credit": 0,
+                    "balance": 250,
+                    "currency_id": [74, "EGP"],
+                }
+            ]
+
+        if model == "account.move" and _has_leaf(domain, "id", "in", [777]):
+            self.calls.append((model, domain))
+            return [
+                {
+                    "id": 777,
+                    "name": "MISC/2026/0042",
+                    "ref": "Customer adjustment",
+                    "date": "2026-02-01",
+                    "state": "posted",
+                    "move_type": "entry",
+                    "journal_id": [9, "Miscellaneous Operations"],
+                    "currency_id": [74, "EGP"],
+                }
+            ]
+
+        return super().search_read(model, domain, fields, limit=limit, order=order)
+
+
 def _settings() -> Settings:
     return Settings.from_env()
 
@@ -183,6 +246,35 @@ def test_invoices_found_through_commercial_partner():
     move_domains = [domain for model, domain in client.calls if model == "account.move"]
     assert move_domains, "account.move was never queried"
     assert all(COMMERCIAL_ID in _child_of_targets(domain) for domain in move_domains)
+
+
+def test_crm_search_uses_commercial_partner_hierarchy():
+    client = FakeOdoo(_settings(), CHILD_PARTNER)
+
+    client.customer_snapshot(email="hussein@example.com", phone=None)
+
+    lead_domains = [domain for model, domain in client.calls if model == "crm.lead"]
+    assert lead_domains
+    assert COMMERCIAL_ID in _child_of_targets(lead_domains[0])
+
+
+def test_journal_entries_are_found_from_customer_account_move_lines():
+    client = JournalEntryOdoo(_settings(), CHILD_PARTNER)
+
+    snapshot = client.customer_snapshot(email="hussein@example.com", phone=None)
+
+    assert [entry["name"] for entry in snapshot["journal_entries"]] == [
+        "MISC/2026/0042"
+    ]
+    assert snapshot["journal_entries"][0]["partner_debit"] == 250
+    journal_line_domains = [
+        domain
+        for model, domain in client.calls
+        if model == "account.move.line"
+        and _has_leaf(domain, "move_id.move_type", "=", "entry")
+    ]
+    assert journal_line_domains
+    assert COMMERCIAL_ID in _child_of_targets(journal_line_domains[0])
 
 
 def test_orders_and_invoices_empty_when_restricted_but_courses_still_resolve():

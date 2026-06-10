@@ -76,6 +76,7 @@ async def fetch_dashboard_snapshot(
         partner_id=partner_id,
         include_orders="orders" not in restricted_sections,
         include_invoices="invoices" not in restricted_sections,
+        include_journal_entries=True,
     )
     snapshot["restricted_sections"] = restricted_sections
     snapshot["agent"] = {

@@ -19,6 +19,14 @@ def test_formats_snapshot_and_attributes():
             "commercial_partner_id": [5, "Acme"],
             "user_id": [22, "Mona Sales"],
         },
+        "related_contacts": [
+            {
+                "id": 5,
+                "name": "Alice",
+                "email": "alice@example.com",
+                "phone": "+201001112223",
+            }
+        ],
         "leads": [{"id": 9, "name": "Website lead", "stage_id": [1, "New"]}],
         "orders": [
             {
@@ -45,6 +53,18 @@ def test_formats_snapshot_and_attributes():
                 "lines": [{"product_id": [8, "Course"], "quantity": 1, "price_subtotal": 900}],
             }
         ],
+        "journal_entries": [
+            {
+                "id": 14,
+                "name": "MISC/2026/0042",
+                "date": "2026-02-01",
+                "state": "posted",
+                "journal_id": [9, "Miscellaneous Operations"],
+                "partner_debit": 250,
+                "partner_credit": 0,
+                "currency_id": [74, "EGP"],
+            }
+        ],
         "courses": [
             {
                 "id": 12,
@@ -63,6 +83,7 @@ def test_formats_snapshot_and_attributes():
     assert "Alice" in note
     assert "S0003" in note
     assert "INV/2026/0001" in note
+    assert "MISC/2026/0042" in note
     assert "Sales Masterclass" in note
     assert "Mona Sales" in note
     assert attrs["odoo_match_found"] is True
@@ -71,6 +92,9 @@ def test_formats_snapshot_and_attributes():
     assert attrs["odoo_last_order_salesperson"] == "Mona Sales"
     assert attrs["odoo_last_invoice_salesperson"] == "Mona Sales"
     assert attrs["odoo_invoices_count"] == 1
+    assert attrs["odoo_journal_entries_count"] == 1
+    assert attrs["odoo_last_journal_entry"] == "MISC/2026/0042"
+    assert attrs["odoo_related_contacts_count"] == 1
     assert attrs["odoo_courses_count"] == 1
 
 

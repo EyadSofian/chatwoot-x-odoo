@@ -1,4 +1,9 @@
-from app.services.odoo import _course_identity, _looks_like_course_line, _phone_tokens
+from app.services.odoo import (
+    _course_identity,
+    _looks_like_course_line,
+    _phone_search_fragments,
+    _phone_tokens,
+)
 
 
 def test_phone_tokens_include_egyptian_local_and_international_forms():
@@ -8,6 +13,13 @@ def test_phone_tokens_include_egyptian_local_and_international_forms():
     assert "01001234567" in tokens
     assert "1001234567" in tokens
     assert "001234567" in tokens
+
+
+def test_phone_search_fragments_include_short_suffix_for_formatted_odoo_numbers():
+    fragments = set(_phone_search_fragments("+20 100 123 4567"))
+
+    assert "1234567" in fragments
+    assert "4567" in fragments
 
 
 def test_course_line_detection_matches_event_course_descriptions():

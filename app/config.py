@@ -73,6 +73,7 @@ class Settings:
     max_leads: int
     max_orders: int
     max_invoices: int
+    max_journal_entries: int
     max_courses: int
     app_state_db_path: Path
 
@@ -114,6 +115,7 @@ class Settings:
             max_leads=_env_int("MAX_LEADS", 5),
             max_orders=_env_int("MAX_ORDERS", 5),
             max_invoices=_env_int("MAX_INVOICES", 5),
+            max_journal_entries=_env_int("MAX_JOURNAL_ENTRIES", 5),
             max_courses=_env_int("MAX_COURSES", 5),
             app_state_db_path=Path(_env("APP_STATE_DB_PATH", "data/integration.sqlite3")),
         )
