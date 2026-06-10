@@ -149,6 +149,8 @@ The dashboard app will:
   Courses, Journal, and Related Contacts tabs.
 - Show Odoo custom fields (`x_*`) when they are readable scalar or many2one
   fields.
+- Load each heavy Odoo section on demand when its tab is opened, so a large
+  invoice or journal history does not block the customer profile.
 - Show the contact salesperson, sales order salesperson, and invoice salesperson.
 - Show every section to every signed-in Chatwoot agent.
 - Show a Diagnostics panel with the partner search scope and optional-model

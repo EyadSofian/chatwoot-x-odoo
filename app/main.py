@@ -124,6 +124,7 @@ async def dashboard_search(
     email: Annotated[str | None, Query(max_length=200)] = None,
     phone: Annotated[str | None, Query(max_length=80)] = None,
     partner_id: Annotated[int | None, Query()] = None,
+    sections: Annotated[str | None, Query(max_length=200)] = None,
     agent_email: Annotated[str | None, Query(max_length=200)] = None,
     agent_id: Annotated[str | None, Query(max_length=80)] = None,
     agent_name: Annotated[str | None, Query(max_length=200)] = None,
@@ -174,6 +175,12 @@ async def dashboard_search(
         email=email,
         phone=phone,
         partner_id=partner_id,
+        sections={
+            section.strip().lower()
+            for section in (sections or "").split(",")
+            if section.strip()
+        }
+        or None,
         agent_email=agent_email,
         agent_id=agent_id,
         agent_name=agent_name,

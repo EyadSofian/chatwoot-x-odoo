@@ -7,6 +7,8 @@
     selectedPartnerId: null,
     themeChoice: localStorage.getItem("odoo-panel-theme") || "auto",
     fieldLabels: {},
+    loadedSections: new Set(),
+    loadingSections: new Set(),
   };
 
   const els = {
@@ -779,12 +781,14 @@
     const courses = snapshot.courses || [];
     const warnings = snapshot.warnings || [];
 
-    els.metricQuotations.textContent = String(quotations.length);
-    els.metricSalesOrders.textContent = String(salesOrders.length);
-    els.metricLeads.textContent = String(leads.length);
-    els.metricInvoices.textContent = String(invoices.length);
-    els.metricInvoicedItems.textContent = String(invoicedItems.length);
-    els.metricCourses.textContent = String(courses.length);
+    const countOrPending = (section, count) =>
+      state.loadedSections.has(section) ? String(count) : "...";
+    els.metricQuotations.textContent = countOrPending("orders", quotations.length);
+    els.metricSalesOrders.textContent = countOrPending("orders", salesOrders.length);
+    els.metricLeads.textContent = countOrPending("crm", leads.length);
+    els.metricInvoices.textContent = countOrPending("invoices", invoices.length);
+    els.metricInvoicedItems.textContent = countOrPending("invoices", invoicedItems.length);
+    els.metricCourses.textContent = countOrPending("courses", courses.length);
     els.noteButton.disabled = !state.lastLookup.conversationId;
 
     renderMatches(snapshot.matches || []);
@@ -832,9 +836,12 @@
       agent_email: state.lastLookup.agentEmail || "",
       agent_id: state.lastLookup.agentId || "",
       agent_name: state.lastLookup.agentName || "",
+      sections: "profile",
     };
     state.selectedPartnerId = params.partner_id || null;
     state.lastLookup = { ...state.lastLookup, ...params };
+    state.loadedSections = new Set(["profile"]);
+    state.loadingSections = new Set();
     setStatus("muted", "Loading Odoo data...");
     try {
       const snapshot = await apiFetch("/api/dashboard/search", params);
@@ -842,6 +849,69 @@
     } catch (error) {
       setStatus("error", "Could not load Odoo data.");
       console.error(error);
+    }
+  }
+
+  function mergeSectionSnapshot(current, incoming, section) {
+    const merged = { ...(current || {}), partner: incoming.partner || current?.partner || null };
+    if (!current?.matches?.length && incoming.matches?.length) merged.matches = incoming.matches;
+    if (section === "contacts") merged.related_contacts = incoming.related_contacts || [];
+    if (section === "crm") merged.leads = incoming.leads || [];
+    if (section === "orders") {
+      merged.orders = incoming.orders || [];
+      merged.quotations = incoming.quotations || [];
+      merged.sales_orders = incoming.sales_orders || [];
+    }
+    if (section === "invoices") {
+      merged.invoices = incoming.invoices || [];
+      merged.invoiced_items = incoming.invoiced_items || [];
+    }
+    if (section === "journal") merged.journal_entries = incoming.journal_entries || [];
+    if (section === "courses") merged.courses = incoming.courses || [];
+
+    const labels = { ...(current?.field_labels || {}) };
+    Object.entries(incoming.field_labels || {}).forEach(([group, values]) => {
+      labels[group] = { ...(labels[group] || {}), ...(values || {}) };
+    });
+    merged.field_labels = labels;
+    merged.warnings = [...new Set([...(current?.warnings || []), ...(incoming.warnings || [])])];
+    merged.debug = { ...(current?.debug || {}), ...(incoming.debug || {}) };
+    return merged;
+  }
+
+  async function loadDashboardSection(section) {
+    if (
+      !section ||
+      section === "profile" ||
+      state.loadedSections.has(section) ||
+      state.loadingSections.has(section) ||
+      !state.snapshot?.partner
+    ) {
+      return;
+    }
+
+    state.loadingSections.add(section);
+    setStatus("muted", `Loading ${humanizeField(section)}...`);
+    const params = {
+      q: state.lastLookup.q || "",
+      email: state.lastLookup.email || "",
+      phone: state.lastLookup.phone || "",
+      partner_id: state.selectedPartnerId || state.snapshot.partner.id || "",
+      agent_email: state.lastLookup.agentEmail || "",
+      agent_id: state.lastLookup.agentId || "",
+      agent_name: state.lastLookup.agentName || "",
+      sections: section,
+    };
+
+    try {
+      const incoming = await apiFetch("/api/dashboard/search", params);
+      state.loadedSections.add(section);
+      renderSnapshot(mergeSectionSnapshot(state.snapshot, incoming, section));
+    } catch (error) {
+      setStatus("error", `Could not load ${humanizeField(section)}.`);
+      console.error(error);
+    } finally {
+      state.loadingSections.delete(section);
     }
   }
 
@@ -937,6 +1007,17 @@
       document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.add("is-hidden"));
       button.classList.add("is-active");
       document.getElementById(`tab-${button.dataset.tab}`).classList.remove("is-hidden");
+      const sectionMap = {
+        contacts: "contacts",
+        crm: "crm",
+        quotations: "orders",
+        "sales-orders": "orders",
+        "invoiced-items": "invoices",
+        invoices: "invoices",
+        courses: "courses",
+        journal: "journal",
+      };
+      loadDashboardSection(sectionMap[button.dataset.tab]);
     });
   });
 

@@ -348,3 +348,29 @@ def test_orders_and_invoices_empty_when_restricted_but_courses_still_resolve():
     assert snapshot["invoiced_items"] == []
     assert snapshot["debug"]["orders_included"] is False
     assert snapshot["debug"]["invoices_included"] is False
+
+
+def test_snapshot_can_load_only_the_customer_profile():
+    client = FakeOdoo(_settings(), CHILD_PARTNER)
+
+    snapshot = client.customer_snapshot(
+        email="hussein@example.com",
+        phone=None,
+        include_contacts=False,
+        include_leads=False,
+        include_orders=False,
+        include_invoices=False,
+        include_journal_entries=False,
+        include_courses=False,
+    )
+
+    assert snapshot["partner"]["id"] == 10
+    assert snapshot["related_contacts"] == []
+    assert snapshot["leads"] == []
+    assert snapshot["orders"] == []
+    assert snapshot["invoices"] == []
+    assert snapshot["journal_entries"] == []
+    assert snapshot["courses"] == []
+    assert snapshot["debug"]["contacts_included"] is False
+    assert snapshot["debug"]["leads_included"] is False
+    assert snapshot["debug"]["courses_included"] is False

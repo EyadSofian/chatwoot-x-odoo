@@ -1248,9 +1248,12 @@ class OdooClient:
         phone: str | None,
         query: str | None = None,
         partner_id: int | None = None,
+        include_contacts: bool = True,
+        include_leads: bool = True,
         include_orders: bool = True,
         include_invoices: bool = True,
         include_journal_entries: bool = True,
+        include_courses: bool = True,
     ) -> dict[str, Any]:
         if partner_id:
             partner = self.get_partner(partner_id)
@@ -1278,9 +1281,19 @@ class OdooClient:
 
         lookup_email = email or (partner or {}).get("email")
         lookup_phone = phone or (partner or {}).get("phone") or (partner or {}).get("mobile")
-        related_contacts, contacts_warning = self.get_related_contacts(partner_ids=scope_ids)
-        leads, leads_warning = self.get_leads(
-            partner_ids=scope_ids, email=lookup_email, phone=lookup_phone
+        related_contacts, contacts_warning = (
+            self.get_related_contacts(partner_ids=scope_ids)
+            if include_contacts
+            else ([], None)
+        )
+        leads, leads_warning = (
+            self.get_leads(
+                partner_ids=scope_ids,
+                email=lookup_email,
+                phone=lookup_phone,
+            )
+            if include_leads
+            else ([], None)
         )
         orders, orders_warning = (
             self.get_sale_orders(partner_ids=scope_ids) if include_orders else ([], None)
@@ -1318,7 +1331,9 @@ class OdooClient:
             if include_journal_entries
             else ([], None)
         )
-        courses, courses_warning = self.get_courses(partner_ids=scope_ids)
+        courses, courses_warning = (
+            self.get_courses(partner_ids=scope_ids) if include_courses else ([], None)
+        )
         warnings = [
             warning
             for warning in [
@@ -1384,9 +1399,12 @@ class OdooClient:
             "partner_id": partner_id,
             "commercial_partner_id": commercial_id,
             "scope_partner_ids": scope_ids,
+            "contacts_included": include_contacts,
+            "leads_included": include_leads,
             "orders_included": include_orders,
             "invoices_included": include_invoices,
             "journal_entries_included": include_journal_entries,
+            "courses_included": include_courses,
             "counts": {
                 "matches": len(matches),
                 "related_contacts": len(related_contacts),

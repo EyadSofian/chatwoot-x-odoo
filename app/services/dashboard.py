@@ -61,6 +61,7 @@ async def fetch_dashboard_snapshot(
     email: str | None,
     phone: str | None,
     partner_id: int | None,
+    sections: set[str] | None = None,
     agent_email: str | None = None,
     agent_id: str | None = None,
     agent_name: str | None = None,
@@ -68,15 +69,26 @@ async def fetch_dashboard_snapshot(
     agent = AgentContext(email=agent_email, agent_id=agent_id, name=agent_name)
     restricted_sections = restricted_sections_for(agent, settings)
     _log_restriction(agent, restricted_sections)
+    requested = sections or {
+        "contacts",
+        "crm",
+        "orders",
+        "invoices",
+        "journal",
+        "courses",
+    }
     snapshot = await run_in_threadpool(
         OdooClient(settings).customer_snapshot,
         email=email,
         phone=phone,
         query=query,
         partner_id=partner_id,
-        include_orders="orders" not in restricted_sections,
-        include_invoices="invoices" not in restricted_sections,
-        include_journal_entries=True,
+        include_contacts="contacts" in requested,
+        include_leads="crm" in requested,
+        include_orders="orders" in requested and "orders" not in restricted_sections,
+        include_invoices="invoices" in requested and "invoices" not in restricted_sections,
+        include_journal_entries="journal" in requested,
+        include_courses="courses" in requested,
     )
     snapshot["restricted_sections"] = restricted_sections
     snapshot["agent"] = {
