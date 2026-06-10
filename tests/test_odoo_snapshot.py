@@ -68,6 +68,19 @@ def _child_of_targets(domain: list[Any], field: str = "partner_id") -> list[int]
     return []
 
 
+def _in_targets(domain: list[Any], field: str) -> list[int]:
+    for clause in domain:
+        if (
+            isinstance(clause, (list, tuple))
+            and len(clause) == 3
+            and clause[0] == field
+            and clause[1] == "in"
+        ):
+            ids = clause[2]
+            return [ids] if isinstance(ids, int) else list(ids)
+    return []
+
+
 def _has_leaf(domain: list[Any], field: str, operator: str, value: Any) -> bool:
     return any(
         isinstance(clause, (list, tuple))
@@ -107,7 +120,10 @@ class FakeOdoo(OdooClient):
             return [self.partner]
 
         if model == "sale.order":
-            if COMMERCIAL_ID in _child_of_targets(domain):
+            if (
+                COMMERCIAL_ID in _child_of_targets(domain)
+                or COMMERCIAL_ID in _in_targets(domain, "commercial_partner_id")
+            ):
                 return [
                     {
                         "id": 555,
@@ -267,7 +283,11 @@ def test_sales_orders_found_through_commercial_partner():
 
     sale_domains = [domain for model, domain in client.calls if model == "sale.order"]
     assert sale_domains, "sale.order was never queried"
-    assert all(COMMERCIAL_ID in _child_of_targets(domain) for domain in sale_domains)
+    assert all(
+        COMMERCIAL_ID in _child_of_targets(domain)
+        or COMMERCIAL_ID in _in_targets(domain, "commercial_partner_id")
+        for domain in sale_domains
+    )
 
 
 def test_snapshot_splits_quotations_from_confirmed_sales_orders():

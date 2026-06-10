@@ -643,10 +643,8 @@ class OdooClient:
             "sale.order",
             partner_ids,
             candidate_fields=(
-                "partner_id",
                 "commercial_partner_id",
-                "partner_invoice_id",
-                "partner_shipping_id",
+                "partner_id",
             ),
         )
         order_fields = self.record_fields(
@@ -685,7 +683,6 @@ class OdooClient:
                 "amount_paid",
                 "invoice_status",
                 "invoice_count",
-                "invoice_ids",
                 "require_signature",
                 "require_payment",
                 "signed_by",
@@ -697,7 +694,6 @@ class OdooClient:
                 "note",
                 "write_date",
             ],
-            include_custom=True,
         )
         orders, warning = self.optional_search_read(
             "sale.order",
@@ -735,14 +731,12 @@ class OdooClient:
                 "currency_id",
                 "customer_lead",
                 "is_downpayment",
-                "invoice_lines",
                 "event_id",
                 "event_ticket_id",
                 "analytic_distribution",
                 "create_date",
                 "write_date",
             ],
-            include_custom=True,
         )
         lines, lines_warning = self.optional_search_read(
             "sale.order.line",
