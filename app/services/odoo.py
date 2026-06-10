@@ -86,6 +86,36 @@ DISPLAYABLE_CUSTOM_FIELD_TYPES = {
     "selection",
     "text",
 }
+ARABIC_SEARCH_TRANSLATION = str.maketrans(
+    {
+        "\u0622": "\u0627",
+        "\u0623": "\u0627",
+        "\u0625": "\u0627",
+        "\u0626": "\u064a",
+        "\u0624": "\u0648",
+        "\u0629": "\u0647",
+        "\u0649": "\u064a",
+        "\u0640": None,
+    }
+)
+ARABIC_DIACRITICS = re.compile(
+    "[\u0610-\u061a\u064b-\u065f\u0670\u06d6-\u06ed]"
+)
+
+
+def _normalize_search_text(value: str | None) -> str:
+    text = str(value or "").casefold().translate(ARABIC_SEARCH_TRANSLATION)
+    text = ARABIC_DIACRITICS.sub("", text)
+    return " ".join(re.sub(r"[^\w]+", " ", text).split())
+
+
+def _name_search_tokens(value: str | None) -> list[str]:
+    tokens = [
+        token
+        for token in re.sub(r"[^\w]+", " ", str(value or "")).split()
+        if len(_normalize_search_text(token)) >= 3
+    ]
+    return sorted(dict.fromkeys(tokens), key=len, reverse=True)
 
 
 def _phone_tokens(value: str | None) -> list[str]:
@@ -406,6 +436,9 @@ class OdooClient:
             if not _digits(query):
                 clauses.append(["name", "ilike", query])
                 clauses.append(["email", "ilike", query])
+                for name_token in _name_search_tokens(query)[:3]:
+                    if name_token.casefold() != query.casefold():
+                        clauses.append(["name", "ilike", name_token])
             elif query.isdigit() and len(query) <= 9:
                 clauses.append(["id", "=", int(query)])
 
@@ -435,7 +468,7 @@ class OdooClient:
         score = 0
         partner_email = str(partner.get("email") or "").strip().lower()
         lookup_email = str(email or "").strip().lower()
-        query_value = str(query or "").strip().lower()
+        query_value = _normalize_search_text(query)
 
         if lookup_email and partner_email == lookup_email:
             score += 180
@@ -443,12 +476,21 @@ class OdooClient:
             score += 120
 
         if query_value and not _digits(query_value):
-            name = str(partner.get("name") or "").strip().lower()
+            name = _normalize_search_text(partner.get("name"))
             if name == query_value:
-                score += 110
+                score += 160
             elif query_value in name:
-                score += 70
-            if partner_email and query_value in partner_email:
+                score += 100
+
+            query_tokens = set(query_value.split())
+            name_tokens = set(name.split())
+            overlap = query_tokens & name_tokens
+            if query_tokens and query_tokens.issubset(name_tokens):
+                score += 120
+            elif overlap:
+                score += int(80 * len(overlap) / len(query_tokens))
+
+            if partner_email and query_value in _normalize_search_text(partner_email):
                 score += 60
 
         lookup_phones = [value for value in [phone, query] if value and _digits(value)]
