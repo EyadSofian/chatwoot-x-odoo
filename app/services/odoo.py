@@ -642,10 +642,7 @@ class OdooClient:
         partner_domain = self.partner_link_domain(
             "sale.order",
             partner_ids,
-            candidate_fields=(
-                "commercial_partner_id",
-                "partner_id",
-            ),
+            candidate_fields=("commercial_partner_id",),
         )
         order_fields = self.record_fields(
             "sale.order",
